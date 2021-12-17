@@ -2,14 +2,21 @@ use std::{collections::hash_map::DefaultHasher, fs::File, hash::Hasher, io, mem,
 
 use index::{Entry, EntryData, Hash, Index};
 use memmngr::{MemoryManagment, Used};
-use mmap_io::MMap;
+use mmap::MMap;
 
 mod index;
 mod memmngr;
-mod mmap_io;
+mod mmap;
 mod resize;
+mod iter;
+#[cfg(feature = "msgpack")]
+mod msgpack;
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "msgpack")]
+pub use msgpack::TypedDatabase;
+
 
 const INDEX_HEADER: [u8; 16] = *b"rust-persist-01\n";
 
@@ -32,25 +39,30 @@ struct Header {
 }
 
 impl Header {
+    #[inline]
     pub fn is_dirty(&self) -> bool {
         self.flags[0] & 1 == 1
     }
 
+    #[inline]
     pub fn set_dirty(&mut self, dirty: bool) {
         self.flags[0] = self.flags[0] & 0xfe | if dirty { 1 } else { 0 }
     }
 }
 
+#[inline]
 fn total_size(index_capacity: usize, data_size: u64) -> u64 {
     mem::size_of::<Header>() as u64 + index_capacity as u64 * mem::size_of::<Entry>() as u64 + data_size
 }
 
+#[inline]
 fn hash_key(key: &[u8]) -> Hash {
     let mut hasher = DefaultHasher::default();
     hasher.write(key);
     hasher.finish()
 }
 
+#[inline]
 fn match_key(entry: &EntryData, data: &[u8], data_start: u64, key: &[u8]) -> bool {
     let start = (entry.position - data_start) as usize;
     let end = start + entry.key_size as usize;
@@ -71,7 +83,7 @@ pub struct Database {
 
 impl Database {
     pub fn new_index(path: &Path, create: bool) -> Result<Self, Error> {
-        let opened_fd = mmap_io::open_fd(path, create)?;
+        let opened_fd = mmap::open_fd(path, create)?;
         let mut mem = MemoryManagment::new(
             opened_fd.data_start as u64,
             opened_fd.data_start as u64 + opened_fd.data.len() as u64,
@@ -129,12 +141,14 @@ impl Database {
         }
     }
 
+    #[inline]
     pub(crate) fn get_data(&self, pos: u64, len: u32) -> &[u8] {
         debug_assert!(pos >= self.data_start);
         debug_assert!(pos + len as u64 <= self.data_start + self.data.len() as u64);
         &self.data[(pos - self.data_start) as usize..(pos + len as u64 - self.data_start) as usize]
     }
 
+    #[inline]
     pub(crate) fn get_data_mut(&mut self, pos: u64, len: u32) -> &mut [u8] {
         debug_assert!(pos >= self.data_start);
         debug_assert!(pos + len as u64 <= self.data_start + self.data.len() as u64);
@@ -152,7 +166,6 @@ impl Database {
     }
 
     #[inline]
-    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.index.len() == 0
     }
@@ -177,7 +190,6 @@ impl Database {
         }
     }
 
-    #[inline]
     pub fn set(&mut self, key: &[u8], data: &[u8]) -> Result<Option<&mut [u8]>, Error> {
         self.maybe_extend_index()?;
         self.maybe_shrink_data()?;
@@ -204,7 +216,6 @@ impl Database {
         }
     }
 
-    #[inline]
     pub fn delete(&mut self, key: &[u8]) -> Result<Option<&mut [u8]>, Error> {
         self.maybe_shrink_index()?;
         self.maybe_shrink_data()?;
@@ -232,6 +243,7 @@ impl Database {
         Ok(())
     }
 
+    #[inline]
     pub fn close(self) {
         // nothing to do, just drop self
     }

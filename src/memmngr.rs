@@ -187,26 +187,32 @@ impl MemoryManagment {
         evicted
     }
 
+    #[inline]
     fn first_used(&self) -> Option<&Used> {
         self.used.iter().next()
     }
 
+    #[inline]
     fn last_used(&self) -> Option<&Used> {
         self.used.iter().last()
     }
 
+    #[inline]
     pub(crate) fn get_used(&self) -> &BTreeSet<Used> {
         &self.used
     }
 
+    #[inline]
     pub fn used_size(&self) -> u64 {
         self.used_size
     }
 
+    #[inline]
     pub fn start(&self) -> Pos {
         self.start
     }
 
+    #[inline]
     pub fn end(&self) -> Pos {
         self.end
     }
@@ -217,6 +223,7 @@ impl MemoryManagment {
         self.used_size = 0;
     }
 
+    #[inline]
     pub(crate) fn take_used(self) -> BTreeSet<Used> {
         self.used
     }

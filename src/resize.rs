@@ -3,7 +3,7 @@ use std::mem;
 use crate::{
     index::Index,
     memmngr::MemoryManagment,
-    mmap_io::{self, mmap_as_ref},
+    mmap::{self, mmap_as_ref},
     total_size, Database, Error, INITIAL_INDEX_CAPACITY, MAX_USAGE, MIN_USAGE,
 };
 
@@ -11,7 +11,7 @@ impl Database {
     pub(crate) fn resize_fd(&mut self, index_capacity: usize, data_size: u64) -> Result<(), Error> {
         self.mmap.flush().map_err(Error::Io)?;
         self.fd.set_len(total_size(index_capacity, data_size)).map_err(Error::Io)?;
-        self.mmap = mmap_io::map_fd(&self.fd)?;
+        self.mmap = mmap::map_fd(&self.fd)?;
         let (header, entries, data_start, data) = unsafe { mmap_as_ref(&mut self.mmap, index_capacity) };
         self.header = header;
         self.data = data;
@@ -30,10 +30,7 @@ impl Database {
         Ok(())
     }
 
-    pub(crate) fn maybe_shrink_data(&mut self) -> Result<(), Error> {
-        if self.mem.used_size() > self.data.len() as u64 / 2 || self.data.len() <= 4 * 1024 {
-            return Ok(());
-        }
+    pub fn defragment(&mut self) -> Result<(), Error> {
         debug_assert!(self.is_valid(), "Invalid before shrink data");
         let mut old_mem = MemoryManagment::new(self.mem.start(), self.mem.end());
         mem::swap(&mut self.mem, &mut old_mem);
@@ -52,6 +49,13 @@ impl Database {
         assert!(self.mem.set_end(self.data_start + self.data.len() as u64).is_empty());
         debug_assert!(self.is_valid(), "Invalid after shrink data");
         Ok(())
+    }
+
+    pub(crate) fn maybe_shrink_data(&mut self) -> Result<(), Error> {
+        if self.mem.used_size() > self.data.len() as u64 / 2 || self.data.len() <= 4 * 1024 {
+            return Ok(());
+        }
+        self.defragment()
     }
 
     pub(crate) fn maybe_extend_index(&mut self) -> Result<(), Error> {
