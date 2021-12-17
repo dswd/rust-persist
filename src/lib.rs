@@ -1,4 +1,4 @@
-use std::{collections::hash_map::DefaultHasher, fs::File, hash::Hasher, io, mem, path::Path};
+use std::{fs::File, hash::Hasher, io, mem, path::Path};
 
 use index::{Entry, EntryData, Hash, Index};
 use memmngr::{MemoryManagment, Used};
@@ -16,6 +16,7 @@ mod tests;
 
 #[cfg(feature = "msgpack")]
 pub use msgpack::TypedDatabase;
+use siphasher::sip::SipHasher13;
 
 
 const INDEX_HEADER: [u8; 16] = *b"rust-persist-01\n";
@@ -57,7 +58,7 @@ fn total_size(index_capacity: usize, data_size: u64) -> u64 {
 
 #[inline]
 fn hash_key(key: &[u8]) -> Hash {
-    let mut hasher = DefaultHasher::default();
+    let mut hasher = SipHasher13::default();
     hasher.write(key);
     hasher.finish()
 }
@@ -282,6 +283,11 @@ fn test_size() {
     assert_eq!(36, mem::size_of::<Header>());
     assert_eq!(24, mem::size_of::<Entry>());
     assert_eq!(24576, mem::size_of::<[Entry; 1024]>());
+}
+
+#[test]
+fn test_hash() {
+    assert_eq!(16183295663280961421, hash_key("test".as_bytes()));
 }
 
 #[test]

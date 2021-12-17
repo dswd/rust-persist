@@ -80,6 +80,7 @@ impl Index {
         self.capacity /= 2;
         self.mask = self.capacity-1;
         self.reinsert(self.capacity, 2*self.capacity);
+        self.reinsert_all();
     }
 
     pub(crate) fn reinsert_all(&mut self) {
