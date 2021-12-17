@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{cmp, collections::HashMap, mem};
 
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 
-use crate::Database;
+use crate::{hash_key, index::Entry, Header, Table};
 
 type Rand = ChaCha8Rng;
 
@@ -14,50 +14,107 @@ fn seeded_rng(s: u64) -> Rand {
 }
 
 fn random_data(rand: &mut Rand, max_size: usize) -> Vec<u8> {
-    let size = rand.gen_range(1..max_size);
+    let size = cmp::min(rand.gen_range(0..max_size), rand.gen_range(0..max_size));
     let mut data = vec![0; size];
     rand.fill_bytes(&mut data);
     data
+}
+
+#[test]
+fn test_size() {
+    assert_eq!(36, mem::size_of::<Header>());
+    assert_eq!(24, mem::size_of::<Entry>());
+    assert_eq!(24576, mem::size_of::<[Entry; 1024]>());
+}
+
+#[test]
+fn test_hash() {
+    assert_eq!(16183295663280961421, hash_key("test".as_bytes()));
+}
+
+#[test]
+fn test_create_new() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let tbl = Table::create(file.path()).unwrap();
+    assert!(tbl.is_valid());
+}
+
+#[test]
+fn test_normal_use() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
+    tbl.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
+    tbl.set("key2".as_bytes(), "value2".as_bytes()).unwrap();
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.len(), 2);
+    assert_eq!(tbl.get("key1".as_bytes()), Some("value1".as_bytes()));
+    assert_eq!(tbl.get("key2".as_bytes()), Some("value2".as_bytes()));
+    tbl.set("key1".as_bytes(), "value3".as_bytes()).unwrap();
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.len(), 2);
+    assert_eq!(tbl.get("key1".as_bytes()), Some("value3".as_bytes()));
+    assert_eq!(tbl.get("key2".as_bytes()), Some("value2".as_bytes()));
+    assert!(tbl.delete("key1".as_bytes()).unwrap().is_some());
+    assert!(tbl.delete("key2".as_bytes()).unwrap().is_some());
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.len(), 0);
+    assert_eq!(tbl.get("key1".as_bytes()), None);
+    assert_eq!(tbl.get("key2".as_bytes()), None);
+}
+
+#[test]
+fn test_zero_size() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
+    tbl.set(&[], &[]).unwrap();
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.get(&[]), Some(&[] as &[u8]));
+    tbl.set("no value".as_bytes(), &[]).unwrap();
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.get("no value".as_bytes()), Some(&[] as &[u8]));
+    tbl.set(&[], "no key".as_bytes()).unwrap();
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.get(&[]), Some("no key".as_bytes()));
 }
 
 fn test_one_seed(seed: u64) {
     let mut rand = seeded_rng(seed);
     let mut data = HashMap::new();
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = Database::create(file.path()).unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
     let count = rand.gen_range(100..1000);
     for _ in 0..count / 2 {
         let key = random_data(&mut rand, 100);
         let value = random_data(&mut rand, 1000);
-        db.set(&key, &value).unwrap();
-        assert!(db.is_valid());
+        tbl.set(&key, &value).unwrap();
+        assert!(tbl.is_valid());
         data.insert(key, value);
     }
-    db.close();
-    let mut db = Database::open(file.path()).unwrap();
-    assert!(db.is_valid());
+    tbl.close();
+    let mut tbl = Table::open(file.path()).unwrap();
+    assert!(tbl.is_valid());
     for _ in count / 2..count {
         let key = random_data(&mut rand, 100);
         let value = random_data(&mut rand, 1000);
-        db.set(&key, &value).unwrap();
-        assert!(db.is_valid());
+        tbl.set(&key, &value).unwrap();
+        assert!(tbl.is_valid());
         data.insert(key, value);
     }
-    db.close();
-    let mut db = Database::open(file.path()).unwrap();
-    assert!(db.is_valid());
+    tbl.close();
+    let mut tbl = Table::open(file.path()).unwrap();
+    assert!(tbl.is_valid());
     for (key, value) in data {
-        let stored = db.get(&key);
+        let stored = tbl.get(&key);
         assert!(stored.is_some());
         assert_eq!(stored.unwrap(), &value);
-        let removed = db.delete(&key).unwrap();
+        let removed = tbl.delete(&key).unwrap();
         assert!(removed.is_some());
         assert_eq!(removed.unwrap(), &value);
-        let stored = db.get(&key);
+        let stored = tbl.get(&key);
         assert!(stored.is_none());
-        assert!(db.is_valid());
+        assert!(tbl.is_valid());
     }
-    assert!(db.is_empty())
+    assert!(tbl.is_empty())
 }
 
 #[test]

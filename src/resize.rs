@@ -4,12 +4,12 @@ use crate::{
     index::Index,
     memmngr::MemoryManagment,
     mmap::{self, mmap_as_ref},
-    total_size, Database, Error, INITIAL_INDEX_CAPACITY, MAX_USAGE, MIN_USAGE,
+    total_size, Error, Table, INITIAL_INDEX_CAPACITY, MAX_USAGE, MIN_USAGE,
 };
 
-impl Database {
+impl Table {
     pub(crate) fn resize_fd(&mut self, index_capacity: usize, data_size: u64) -> Result<(), Error> {
-        self.mmap.flush().map_err(Error::Io)?;
+        self.flush()?;
         self.fd.set_len(total_size(index_capacity, data_size)).map_err(Error::Io)?;
         self.mmap = mmap::map_fd(&self.fd)?;
         let (header, entries, data_start, data) = unsafe { mmap_as_ref(&mut self.mmap, index_capacity) };
@@ -120,64 +120,64 @@ impl Database {
 #[test]
 fn extend_data() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = Database::create(file.path()).unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
     let key1 = [0; 1024];
     let key2 = [1; 1024];
     let data = [0; 1024 * 10];
-    db.set(&key1, &data).unwrap();
-    assert!(db.is_valid());
-    db.set(&key2, &data).unwrap();
-    assert!(db.is_valid());
-    db.close();
-    let db = Database::open(file.path()).unwrap();
-    assert!(db.is_valid());
+    tbl.set(&key1, &data).unwrap();
+    assert!(tbl.is_valid());
+    tbl.set(&key2, &data).unwrap();
+    assert!(tbl.is_valid());
+    tbl.close();
+    let tbl = Table::open(file.path()).unwrap();
+    assert!(tbl.is_valid());
 }
 
 #[test]
 fn shrink_data() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = Database::create(file.path()).unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
     let key = [0; 1024];
     let data = [0; 1024 * 10];
-    db.set(&key, &data).unwrap();
-    assert!(db.is_valid());
-    assert!(db.delete(&key).unwrap().is_some());
-    assert!(db.is_valid());
-    db.close();
-    let db = Database::open(file.path()).unwrap();
-    assert!(db.is_valid());
+    tbl.set(&key, &data).unwrap();
+    assert!(tbl.is_valid());
+    assert!(tbl.delete(&key).unwrap().is_some());
+    assert!(tbl.is_valid());
+    tbl.close();
+    let tbl = Table::open(file.path()).unwrap();
+    assert!(tbl.is_valid());
 }
 
 #[test]
 fn extend_index() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = Database::create(file.path()).unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
     let data = [0; 100];
     for i in 0u16..150 {
-        db.set(&i.to_ne_bytes(), &data).unwrap();
-        assert!(db.is_valid());
+        tbl.set(&i.to_ne_bytes(), &data).unwrap();
+        assert!(tbl.is_valid());
     }
-    assert!(db.index.capacity() > INITIAL_INDEX_CAPACITY);
-    db.close();
-    let db = Database::open(file.path()).unwrap();
-    assert!(db.is_valid());
+    assert!(tbl.index.capacity() > INITIAL_INDEX_CAPACITY);
+    tbl.close();
+    let tbl = Table::open(file.path()).unwrap();
+    assert!(tbl.is_valid());
 }
 
 #[test]
 fn shrink_index() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = Database::create(file.path()).unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
     let data = [0; 100];
     for i in 0u16..150 {
-        db.set(&i.to_ne_bytes(), &data).unwrap();
+        tbl.set(&i.to_ne_bytes(), &data).unwrap();
     }
-    assert!(db.is_valid());
-    assert!(db.index.capacity() > INITIAL_INDEX_CAPACITY);
+    assert!(tbl.is_valid());
+    assert!(tbl.index.capacity() > INITIAL_INDEX_CAPACITY);
     for i in 0u16..150 {
-        db.delete(&i.to_ne_bytes()).unwrap();
+        tbl.delete(&i.to_ne_bytes()).unwrap();
     }
-    assert!(db.index.capacity() == INITIAL_INDEX_CAPACITY);
-    db.close();
-    let db = Database::open(file.path()).unwrap();
-    assert!(db.is_valid());
+    assert!(tbl.index.capacity() == INITIAL_INDEX_CAPACITY);
+    tbl.close();
+    let tbl = Table::open(file.path()).unwrap();
+    assert!(tbl.is_valid());
 }

@@ -69,9 +69,7 @@ impl MemoryManagment {
     }
 
     pub fn allocate(&mut self, size: Size, hash: Hash) -> Option<Pos> {
-        if size == 0 {
-            return Some(0)
-        }
+        assert!(size > 0);
         let candidates = self.free.range((Bound::Included(Free { size, start: 0 }), Bound::Unbounded)).take(5);
         let best = candidates.min_by_key(|cand| {
             (cand.size - size).next_power_of_two().trailing_zeros() + cand.start.next_power_of_two().trailing_zeros()
@@ -335,22 +333,6 @@ fn allocate_holes() {
         Op::Free{pos: 1500, result: true},
         Op::Alloc{size: 400, hash: 0, result: Some(1350)}
     ])
-}
-
-#[test]
-fn zero_size() {
-    let mut mem = MemoryManagment::new(1000, 2000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 0, hash: 0, result: Some(0)},
-        Op::Alloc{size: 1000, hash: 0, result: Some(1000)},     
-        Op::Alloc{size: 0, hash: 0, result: Some(0)},
-        Op::Free{pos: 0, result: false},
-    ]);
-    let mut mem = MemoryManagment::new(1000, 1000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 0, hash: 0, result: Some(0)},
-        Op::Free{pos: 0, result: false},
-    ]);
 }
 
 #[test]

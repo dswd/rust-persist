@@ -1,9 +1,9 @@
-use crate::{index::Entry, Database, Error};
+use crate::{index::Entry, Error, Table};
 
 pub struct Iter<'a> {
     pos: usize,
     entries: &'a [Entry],
-    db: &'a Database,
+    tbl: &'a Table,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -19,18 +19,16 @@ impl<'a> Iterator for Iter<'a> {
             if !entry.is_used() {
                 continue;
             }
-            let data = self.db.get_data(entry.data.position, entry.data.size);
+            let data = self.tbl.get_data(entry.data.position, entry.data.size);
             let (key, value) = data.split_at(entry.data.key_size as usize);
             return Some((key, value));
         }
     }
 }
 
-
-
-impl Database {
+impl Table {
     pub fn iter(&self) -> impl Iterator<Item = (&[u8], &[u8])> {
-        Iter { pos: 0, entries: self.index.get_entries(), db: self }
+        Iter { pos: 0, entries: self.index.get_entries(), tbl: self }
     }
 
     pub fn each<F: FnMut(&[u8], &[u8])>(&self, mut f: F) {
@@ -58,7 +56,7 @@ impl Database {
         let mut pos = 0;
         loop {
             if pos >= self.index.capacity() {
-                return Ok(())
+                return Ok(());
             }
             let entry_data = {
                 let entry = &self.index.get_entries()[pos];
@@ -82,12 +80,11 @@ impl Database {
     }
 }
 
-
 #[test]
 fn test_iter() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = Database::create(file.path()).unwrap();
-    db.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
-    db.set("key2".as_bytes(), "value2".as_bytes()).unwrap();
-    assert_eq!(db.iter().count(), 2);
+    let mut tbl = Table::create(file.path()).unwrap();
+    tbl.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
+    tbl.set("key2".as_bytes(), "value2".as_bytes()).unwrap();
+    assert_eq!(tbl.iter().count(), 2);
 }

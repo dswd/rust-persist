@@ -2,9 +2,9 @@ use std::{marker::PhantomData, path::Path};
 
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{Database, Error};
+use crate::{Error, Table};
 
-impl Database {
+impl Table {
     pub fn get_obj<K: Serialize, V: DeserializeOwned>(&self, k: K) -> Option<V> {
         let key = rmp_serde::to_vec(&k).expect("Failed to encode");
         let value = self.get(&key);
@@ -29,7 +29,9 @@ pub struct Iter<K, V, I> {
     _value: PhantomData<V>,
 }
 
-impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item=(&'a [u8], &'a[u8])>> Iterator for Iter<K, V, I> {
+impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item = (&'a [u8], &'a [u8])>> Iterator
+    for Iter<K, V, I>
+{
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -39,30 +41,30 @@ impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item=(&'a [u8], &
     }
 }
 
-pub struct TypedDatabase<K, V> {
-    inner: Database,
+pub struct TypedTable<K, V> {
+    inner: Table,
     _key: PhantomData<K>,
     _value: PhantomData<V>,
 }
 
-impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedDatabase<K, V> {
+impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTable<K, V> {
     #[inline]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        Ok(Self { inner: Database::open(path)?, _key: PhantomData, _value: PhantomData })
+        Ok(Self { inner: Table::open(path)?, _key: PhantomData, _value: PhantomData })
     }
 
     #[inline]
     pub fn create<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        Ok(Self { inner: Database::create(path)?, _key: PhantomData, _value: PhantomData })
+        Ok(Self { inner: Table::create(path)?, _key: PhantomData, _value: PhantomData })
     }
 
     #[inline]
-    pub fn inner(&self) -> &Database {
+    pub fn inner(&self) -> &Table {
         &self.inner
     }
 
     #[inline]
-    pub fn into_inner(self) -> Database {
+    pub fn into_inner(self) -> Table {
         self.inner
     }
 
@@ -82,12 +84,8 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedData
     }
 
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item=(K, V)> + '_ {
-        Iter {
-            inner: self.inner.iter(),
-            _key: PhantomData,
-            _value: PhantomData
-        }
+    pub fn iter(&self) -> impl Iterator<Item = (K, V)> + '_ {
+        Iter { inner: self.inner.iter(), _key: PhantomData, _value: PhantomData }
     }
 
     #[inline]
@@ -106,58 +104,57 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedData
     }
 }
 
-
 #[test]
 fn test_dynamic_types() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = Database::create(file.path()).unwrap();
-    db.set_obj("key1", "value1").unwrap();
-    db.set_obj(("key2", 1), (1, true)).unwrap();
-    assert!(db.is_valid());
-    assert_eq!(db.len(), 2);
-    assert_eq!(db.get_obj("key1"), Some("value1".to_string()));
-    assert_eq!(db.get_obj(("key2", 1)), Some((1, true)));
-    db.set_obj("key1", "value3").unwrap();
-    assert!(db.is_valid());
-    assert_eq!(db.len(), 2);
-    assert_eq!(db.get_obj("key1"), Some("value3".to_string()));
-    assert_eq!(db.get_obj(("key2", 1)), Some((1, true)));
-    assert!(db.delete_obj("key1").unwrap());
-    assert!(db.delete_obj(("key2", 1)).unwrap());
-    assert!(db.is_valid());
-    assert_eq!(db.len(), 0);
-    assert_eq!(db.get_obj("key1"), Option::<bool>::None);
-    assert_eq!(db.get_obj(("key2", 1)), Option::<bool>::None);
+    let mut tbl = Table::create(file.path()).unwrap();
+    tbl.set_obj("key1", "value1").unwrap();
+    tbl.set_obj(("key2", 1), (1, true)).unwrap();
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.len(), 2);
+    assert_eq!(tbl.get_obj("key1"), Some("value1".to_string()));
+    assert_eq!(tbl.get_obj(("key2", 1)), Some((1, true)));
+    tbl.set_obj("key1", "value3").unwrap();
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.len(), 2);
+    assert_eq!(tbl.get_obj("key1"), Some("value3".to_string()));
+    assert_eq!(tbl.get_obj(("key2", 1)), Some((1, true)));
+    assert!(tbl.delete_obj("key1").unwrap());
+    assert!(tbl.delete_obj(("key2", 1)).unwrap());
+    assert!(tbl.is_valid());
+    assert_eq!(tbl.len(), 0);
+    assert_eq!(tbl.get_obj("key1"), Option::<bool>::None);
+    assert_eq!(tbl.get_obj(("key2", 1)), Option::<bool>::None);
 }
 
 #[test]
 fn test_static_types() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = TypedDatabase::<usize, String>::create(file.path()).unwrap();
-    db.set(1, "value1".to_string()).unwrap();
-    db.set(2, "value2".to_string()).unwrap();
-    assert!(db.inner().is_valid());
-    assert_eq!(db.len(), 2);
-    assert_eq!(db.get(1), Some("value1".to_string()));
-    assert_eq!(db.get(2), Some("value2".to_string()));
-    db.set(1, "value3".to_string()).unwrap();
-    assert!(db.inner().is_valid());
-    assert_eq!(db.len(), 2);
-    assert_eq!(db.get(1), Some("value3".to_string()));
-    assert_eq!(db.get(2), Some("value2".to_string()));
-    assert!(db.delete(1).unwrap());
-    assert!(db.delete(2).unwrap());
-    assert!(db.inner().is_valid());
-    assert_eq!(db.len(), 0);
-    assert_eq!(db.get(1), None);
-    assert_eq!(db.get(2), None);
+    let mut tbl = TypedTable::<usize, String>::create(file.path()).unwrap();
+    tbl.set(1, "value1".to_string()).unwrap();
+    tbl.set(2, "value2".to_string()).unwrap();
+    assert!(tbl.inner().is_valid());
+    assert_eq!(tbl.len(), 2);
+    assert_eq!(tbl.get(1), Some("value1".to_string()));
+    assert_eq!(tbl.get(2), Some("value2".to_string()));
+    tbl.set(1, "value3".to_string()).unwrap();
+    assert!(tbl.inner().is_valid());
+    assert_eq!(tbl.len(), 2);
+    assert_eq!(tbl.get(1), Some("value3".to_string()));
+    assert_eq!(tbl.get(2), Some("value2".to_string()));
+    assert!(tbl.delete(1).unwrap());
+    assert!(tbl.delete(2).unwrap());
+    assert!(tbl.inner().is_valid());
+    assert_eq!(tbl.len(), 0);
+    assert_eq!(tbl.get(1), None);
+    assert_eq!(tbl.get(2), None);
 }
 
 #[test]
 fn test_static_iter() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    let mut db = TypedDatabase::<usize, String>::create(file.path()).unwrap();
-    db.set(1, "value1".to_string()).unwrap();
-    db.set(2, "value2".to_string()).unwrap();
-    assert_eq!(db.iter().count(), 2);
+    let mut tbl = TypedTable::<usize, String>::create(file.path()).unwrap();
+    tbl.set(1, "value1".to_string()).unwrap();
+    tbl.set(2, "value2".to_string()).unwrap();
+    assert_eq!(tbl.iter().count(), 2);
 }
