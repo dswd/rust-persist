@@ -5,6 +5,9 @@ authors = ["Dennis Schwerdel <schwerdel@googlemail.com>"]
 description = "Persistent storage for Rust"
 edition = "2018"
 
+[lib]
+crate-type = ["lib"]
+
 [dev-dependencies]
 tempfile = "3"
 rand = "^0.8.4"

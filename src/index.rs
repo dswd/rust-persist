@@ -236,7 +236,7 @@ impl Index {
     }
 
     pub(crate) fn get_entries(&self) -> &[Entry] {
-        &self.entries
+        self.entries
     }
 
     pub fn is_valid(&self) -> bool {

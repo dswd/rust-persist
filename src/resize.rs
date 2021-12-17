@@ -38,7 +38,7 @@ impl Database {
             let new_pos =
                 self.mem.allocate(old_entry.size, old_entry.hash).expect("Defragmented bigger than fragmented");
             safemem::copy_over(
-                &mut self.data,
+                self.data,
                 (old_entry.start - self.data_start) as usize,
                 (new_pos - self.data_start) as usize,
                 old_entry.size as usize,
@@ -78,7 +78,7 @@ impl Database {
                 }
             };
             safemem::copy_over(
-                &mut self.data,
+                self.data,
                 (old_entry.start - self.data_start) as usize,
                 (new_pos - self.data_start) as usize,
                 old_entry.size as usize,
