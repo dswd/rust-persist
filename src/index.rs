@@ -3,7 +3,7 @@ use std::mem;
 pub(crate) type Hash = u64;
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct EntryData {
     pub position: u64,
     pub size: u32,
@@ -24,7 +24,7 @@ impl Entry {
     }
 
     #[inline]
-    fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.hash = 0
     }
 }
@@ -69,7 +69,10 @@ impl Index {
     }
 
     pub(crate) fn grow_from_half(&mut self) {
-        self.reinsert(0, self.capacity/2)
+        for entry in &mut self.entries[self.capacity/2..] {
+            entry.clear()
+        }
+        self.reinsert(0, self.capacity)
     }
 
     pub(crate) fn shrink_to_half(&mut self) {
@@ -133,7 +136,7 @@ impl Index {
                 return LocateResult::Found(pos);
             }
             let odist = self.get_displacement(entry, pos);
-            if dist > odist {
+            if dist > odist && hash != entry.hash {
                 return LocateResult::Steal(pos);
             }
             pos = (pos + 1) & self.mask;
@@ -231,6 +234,10 @@ impl Index {
         }
     }
 
+    pub(crate) fn get_entries(&self) -> &[Entry] {
+        &self.entries
+    }
+
     pub fn is_valid(&self) -> bool {
         let mut valid = true;
         let mut entries = 0;
@@ -239,11 +246,15 @@ impl Index {
             if !entry.is_used() {
                 continue;
             }
+            if entry.data.key_size as u32 > entry.data.size {
+                println!("Index error: key_size > size, {:?}", entry.data);
+                valid = false;
+            }
             entries += 1;
-            match self.locate(entry.hash, |_| true) {
+            match self.locate(entry.hash, |e| &entry.data == e) {
                 LocateResult::Found(p) if p == pos => (),
                 found => {
-                    println!("Index error: entry is at wrong position, expected: {}, actual: {:?}", pos, found);
+                    println!("Index error: entry is at wrong position, actual: {}, expected: {:?}", pos, found);
                     valid = false;
                 }
             };

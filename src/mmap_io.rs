@@ -5,7 +5,7 @@ use std::{fs::File, mem, slice};
 
 use mmap::{MapOption, MemoryMap};
 
-use crate::{total_size, Entry, Error, Header, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY, Database};
+use crate::{total_size, Entry, Error, Header, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY};
 
 /// This method is unsafe as it potentially creates references to uninitialized memory
 pub(crate) unsafe fn mmap_as_ref(
@@ -35,9 +35,16 @@ pub(crate) fn map_fd(fd: &File) -> Result<MemoryMap, Error> {
     .map_err(Error::Mmap)
 }
 
-pub(crate) fn open_fd(
-    path: &Path, create: bool,
-) -> Result<(File, MemoryMap, &'static mut Header, &'static mut [Entry], usize, &'static mut [u8]), Error> {
+pub(crate) struct OpenFdResult {
+    pub fd: File,
+    pub mmap: MemoryMap,
+    pub header: &'static mut Header,
+    pub index_entries: &'static mut [Entry],
+    pub data_start: usize,
+    pub data: &'static mut [u8],
+}
+
+pub(crate) fn open_fd(path: &Path, create: bool) -> Result<OpenFdResult, Error> {
     let fd = OpenOptions::new().read(true).write(true).create(create).open(path).map_err(Error::Io)?;
     if create {
         fd.set_len(total_size(INITIAL_INDEX_CAPACITY, INITIAL_DATA_SIZE as u64)).map_err(Error::Io)?;
@@ -55,6 +62,6 @@ pub(crate) fn open_fd(
     if header.header != INDEX_HEADER {
         return Err(Error::WrongHeader);
     }
-    let (header, entries, data_start, data) = unsafe { mmap_as_ref(&mmap, header.index_capacity as usize) };
-    Ok((fd, mmap, header, entries, data_start, data))
+    let (header, index_entries, data_start, data) = unsafe { mmap_as_ref(&mmap, header.index_capacity as usize) };
+    Ok(OpenFdResult { fd, mmap, header, index_entries, data_start, data })
 }

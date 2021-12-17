@@ -6,6 +6,9 @@ description = "Persistent storage for Rust"
 edition = "2018"
 
 [dev-dependencies]
+tempfile = "3"
+rand = "^0.8.4"
+rand_chacha = "^0.3.1"
 
 [dependencies]
 mmap = "^0.1"

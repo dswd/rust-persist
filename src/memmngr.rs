@@ -178,7 +178,7 @@ impl MemoryManagment {
             assert!(self.free.remove(&first_free));
         }
         self.start = start;
-        assert!(first_free.start >= self.start);
+        assert!(first_free.end() >= self.start);
         first_free.size = (first_free.end() - self.start) as Size;
         first_free.start = self.start;
         if first_free.size > 0 {
@@ -193,6 +193,10 @@ impl MemoryManagment {
 
     fn last_used(&self) -> Option<&Used> {
         self.used.iter().last()
+    }
+
+    pub(crate) fn get_used(&self) -> &BTreeSet<Used> {
+        &self.used
     }
 
     pub fn used_size(&self) -> u64 {
