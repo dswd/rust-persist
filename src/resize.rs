@@ -30,6 +30,12 @@ impl Table {
         Ok(())
     }
 
+    /// Forces the defragmentation of the data section.
+    /// 
+    /// This method will move all data chunks to the front and remove all gaps between them.
+    /// After this, the free space at the end will be truncated to save space.
+    /// 
+    /// This method is automatically called when the used space of the data section is less than 50%
     pub fn defragment(&mut self) -> Result<(), Error> {
         debug_assert!(self.is_valid(), "Invalid before shrink data");
         let mut old_mem = MemoryManagment::new(self.mem.start(), self.mem.end());

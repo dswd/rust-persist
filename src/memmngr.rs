@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, ops::Bound};
+use std::{collections::BTreeSet, ops::Bound, cmp};
 
 use crate::Hash;
 
@@ -49,7 +49,7 @@ impl MemoryManagment {
     }
 
     pub(crate) fn set_used(&mut self, start: Pos, size: Size, hash: Hash) {
-        self.used.insert(Used{start, size, hash});
+        self.used.insert(Used{start, size: cmp::max(size, 1), hash});
     }
 
     pub(crate) fn fix_up(&mut self) {
@@ -68,8 +68,8 @@ impl MemoryManagment {
         }
     }
 
-    pub fn allocate(&mut self, size: Size, hash: Hash) -> Option<Pos> {
-        assert!(size > 0);
+    pub fn allocate(&mut self, mut size: Size, hash: Hash) -> Option<Pos> {
+        size = cmp::max(size, 1);
         let candidates = self.free.range((Bound::Included(Free { size, start: 0 }), Bound::Unbounded)).take(5);
         let best = candidates.min_by_key(|cand| {
             (cand.size - size).next_power_of_two().trailing_zeros() + cand.start.next_power_of_two().trailing_zeros()

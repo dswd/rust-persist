@@ -1,5 +1,6 @@
 use crate::{index::Entry, Error, Table};
 
+/// Internal iterator over all entries in a table
 pub struct Iter<'a> {
     pos: usize,
     entries: &'a [Entry],
@@ -27,16 +28,27 @@ impl<'a> Iterator for Iter<'a> {
 }
 
 impl Table {
+    /// Returns an iterator over all entries in the table
+    /// 
+    /// Each entry will be returned exactly once but in no particular order.
+    /// The entries are returned as tuples of key and value.
     pub fn iter(&self) -> impl Iterator<Item = (&[u8], &[u8])> {
         Iter { pos: 0, entries: self.index.get_entries(), tbl: self }
     }
 
+    /// Execute the given method for all entries in the table
+    /// 
+    /// The method will be executed once for each entry in the table.
     pub fn each<F: FnMut(&[u8], &[u8])>(&self, mut f: F) {
         for (k, v) in self.iter() {
             f(k, v)
         }
     }
 
+    /// Execute the given method for all entries in the table
+    /// 
+    /// The method will be executed once for each entry in the table.
+    /// Changes to the values will be directy reflected in the table.
     pub fn each_mut<F: FnMut(&[u8], &mut [u8])>(&mut self, mut f: F) {
         for pos in 0..self.index.capacity() {
             let entry_data = {
@@ -52,6 +64,9 @@ impl Table {
         }
     }
 
+    /// Filters the entries in the table according to the given predicate.
+    /// 
+    /// If the predicate `f` returns `true` for a key/value pair, the entry will remain in the table, otherwise it will be removed.
     pub fn filter<F: FnMut(&[u8], &[u8]) -> bool>(&mut self, mut f: F) -> Result<(), Error> {
         let mut pos = 0;
         loop {
@@ -76,6 +91,7 @@ impl Table {
                 key.to_vec()
             };
             self.delete(&key)?;
+            //FIXME: if this shrinks the index, we might miss some entries
         }
     }
 }
