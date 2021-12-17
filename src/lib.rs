@@ -2,7 +2,7 @@ use std::{collections::hash_map::DefaultHasher, fs::File, hash::Hasher, io, mem,
 
 use index::{Entry, EntryData, Hash, Index};
 use memmngr::{MemoryManagment, Used};
-use mmap::MemoryMap;
+use mmap_io::MMap;
 
 mod index;
 mod memmngr;
@@ -21,7 +21,6 @@ const INITIAL_DATA_SIZE: usize = 0;
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
-    Mmap(mmap::MapError),
     WrongHeader,
 }
 
@@ -60,7 +59,7 @@ fn match_key(entry: &EntryData, data: &[u8], data_start: u64, key: &[u8]) -> boo
 
 pub struct Database {
     fd: File,
-    mmap: Option<MemoryMap>,
+    mmap: MMap,
     header: &'static mut Header,
     index: Index,
     max_entries: usize,
@@ -99,7 +98,7 @@ impl Database {
             max_entries: (opened_fd.header.index_capacity as f64 * MAX_USAGE) as usize,
             min_entries: (opened_fd.header.index_capacity as f64 * MIN_USAGE) as usize,
             fd: opened_fd.fd,
-            mmap: Some(opened_fd.mmap),
+            mmap: opened_fd.mmap,
             index,
             mem,
             header: opened_fd.header,
@@ -149,7 +148,7 @@ impl Database {
 
     #[inline]
     pub fn size(&self) -> u64 {
-        self.mmap.as_ref().unwrap().len() as u64
+        self.mmap.len() as u64
     }
 
     #[inline]

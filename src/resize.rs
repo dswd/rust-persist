@@ -9,18 +9,16 @@ use crate::{
 
 impl Database {
     pub(crate) fn resize_fd(&mut self, index_capacity: usize, data_size: u64) -> Result<(), Error> {
+        self.mmap.flush().map_err(Error::Io)?;
         self.fd.set_len(total_size(index_capacity, data_size)).map_err(Error::Io)?;
-        self.mmap = None;
-        //TODO: make sure to sync mmap
-        let mmap = mmap_io::map_fd(&self.fd)?;
-        let (header, entries, data_start, data) = unsafe { mmap_as_ref(&mmap, index_capacity) };
+        self.mmap = mmap_io::map_fd(&self.fd)?;
+        let (header, entries, data_start, data) = unsafe { mmap_as_ref(&mut self.mmap, index_capacity) };
         self.header = header;
         self.data = data;
         self.data_start = data_start as u64;
         self.index = Index::new(entries, self.index.len());
         self.min_entries = (index_capacity as f64 * MIN_USAGE) as usize;
         self.max_entries = (index_capacity as f64 * MAX_USAGE) as usize;
-        self.mmap = Some(mmap);
         Ok(())
     }
 

@@ -132,9 +132,9 @@ impl MemoryManagment {
 
     pub fn set_end(&mut self, end: Pos) -> Vec<Used> {
         let mut evicted = vec![];
-        if end < self.end {
+        if end <= self.end {
             while let Some(last) = self.last_used().cloned() {
-                if last.end() < end {
+                if last.end() <= end {
                     break;
                 }
                 self.free(last.start);
@@ -150,7 +150,7 @@ impl MemoryManagment {
             assert!(self.free.remove(&last_free));
         }
         self.end = end;
-        assert!(last_free.start < self.end);
+        assert!(last_free.start <= self.end);
         last_free.size = (self.end - last_free.start) as Size;
         if last_free.size > 0 {
             self.free.insert(last_free);
