@@ -267,6 +267,9 @@ impl Table {
     /// The returned reference is valid until another modification is made to the table.
     /// If the key is new ot the table, `None` is returned.
     ///
+    /// Internally, a copy-on-write method is used instead of overwriting existing values. Therefore old values might
+    /// be visible in the raw table file until a defragmentation happens.
+    /// 
     /// This method might increase the size of the internal index or the data section as needed.
     /// If the table file cannot be extended (e.g. due to no space on device), the method will return an `Err` result.
     pub fn set(&mut self, key: &[u8], data: &[u8]) -> Result<Option<&mut [u8]>, Error> {
@@ -301,6 +304,9 @@ impl Table {
     /// The returned reference is valid until another modification is made to the table.
     /// If the key is not found in the table, `None` is returned.
     ///
+    /// Internally, deleted values are just marked as unused. Therefore old values might be visible in the 
+    /// raw table file until a defragmentation happens.
+    /// 
     /// This method might decrease the size of the internal index or the data section as needed.
     /// If the table file cannot be resized, the method will return an `Err` result.
     pub fn delete(&mut self, key: &[u8]) -> Result<Option<&mut [u8]>, Error> {
