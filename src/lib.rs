@@ -84,6 +84,8 @@ pub enum Error {
     Io(io::Error),
     /// The given file is not a valid table, as it has an invalid header
     WrongHeader,
+    /// The table is locked by another process
+    TableLocked,
     #[cfg(feature = "msgpack")]
     /// A key or value could not be deserialized
     Deserialize(rmp_serde::decode::Error),
