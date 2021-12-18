@@ -88,6 +88,7 @@ fn test_endianness() {
     {
        let mut tbl = open_fd(file.path(), false).unwrap();
        tbl.header.flags[0] = if tbl.header.flags[0] > 0 { 0 } else { 2 };
+       tbl.header.fix_endianness();
        tbl.index_entries[index].fix_endianness();
        tbl.mmap.flush().unwrap();
     }

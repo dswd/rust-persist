@@ -100,24 +100,39 @@ struct Header {
 }
 
 impl Header {
+    pub fn set_flag(&mut self, byte: usize, bit: usize, val: bool) {
+        let mask = 1u8 << bit;
+        self.flags[byte] = (self.flags[byte] & !mask) | if val { mask } else { 0 }
+    }
+
+    pub fn get_flag(&self, byte: usize, bit: usize) -> bool {
+        let mask = 1u8 << bit;
+        self.flags[byte] & mask > 0
+    }
+
     #[inline]
     pub fn is_dirty(&self) -> bool {
-        self.flags[0] & 1 == 1
+        self.get_flag(0, 0)
     }
 
     #[inline]
     pub fn set_dirty(&mut self, dirty: bool) {
-        self.flags[0] = self.flags[0] & 0b11111110 | if dirty { 1 } else { 0 }
+        self.set_flag(0, 0, dirty)
+    }
+
+    #[inline]
+    pub fn fix_endianness(&mut self) {
+        self.index_capacity = self.index_capacity.to_be().to_le();
     }
 
     #[inline]
     pub fn has_correct_endianness(&self) -> bool {
-        ((self.flags[0] & 2) > 0) == is_be()
+        self.get_flag(0, 1) == is_be()
     }
 
     #[inline]
     pub fn set_correct_endianness(&mut self) {
-        self.flags[0] = self.flags[0] & 0b11111101 | if is_be() { 2 } else { 0 }
+        self.set_flag(0, 1, is_be())
     }
 }
 
@@ -207,6 +222,7 @@ impl Table {
             for entry in opened_fd.index_entries.iter_mut() {
                 entry.fix_endianness()
             }
+            opened_fd.header.fix_endianness();
             opened_fd.header.set_correct_endianness();
         }
         let mut count = 0;

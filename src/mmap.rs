@@ -59,6 +59,10 @@ pub(crate) fn open_fd(path: &Path, create: bool) -> Result<OpenFdResult, Error> 
     if header.header != INDEX_HEADER {
         return Err(Error::WrongHeader);
     }
-    let (header, index_entries, data_start, data) = unsafe { mmap_as_ref(&mut mmap, header.index_capacity as usize) };
+    let mut index_capacity = header.index_capacity;
+    if !header.has_correct_endianness() {
+        index_capacity = index_capacity.to_be().to_le();
+    }
+    let (header, index_entries, data_start, data) = unsafe { mmap_as_ref(&mut mmap, index_capacity as usize) };
     Ok(OpenFdResult { fd, mmap, header, index_entries, data_start, data })
 }
