@@ -76,7 +76,6 @@ fn is_be() -> bool {
     1001u16.to_be() == 1001u16
 }
 
-
 #[derive(Debug)]
 /// Error type
 pub enum Error {
@@ -196,7 +195,7 @@ pub struct EntryMut<'a> {
 ///
 /// The index uses a similar algorithm as [`std::collections::HashMap`], optimized for on-disc storage.
 /// The hash algorithm is defined as SipHasher13 (which is also the default in Rust as of writing).
-/// The index is automatically resized to keep its usage between 40% and 90%. This should keep the hash table efficient.
+/// The index is automatically resized to keep its usage between 35% and 90%. This should keep the hash table efficient.
 ///
 /// The data section uses B-Tree structures to track free and used data blocks in order to allocate and free memory regions in the data area.
 /// This data section is extended when needed and shrinked (by moving data blocks to the front and truncating the free data at the end)

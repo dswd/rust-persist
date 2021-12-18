@@ -8,7 +8,7 @@ use memmap::MmapMut;
 
 pub type MMap = MmapMut;
 
-use crate::{total_size, IndexEntry, Error, Header, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY};
+use crate::{total_size, Error, Header, IndexEntry, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY};
 
 /// This method is unsafe as it potentially creates references to uninitialized memory
 pub(crate) unsafe fn mmap_as_ref(
@@ -26,9 +26,7 @@ pub(crate) unsafe fn mmap_as_ref(
 }
 
 pub(crate) fn map_fd(fd: &File) -> Result<MMap, Error> {
-    unsafe {
-        MMap::map_mut(fd).map_err(Error::Io)
-    }
+    unsafe { MMap::map_mut(fd).map_err(Error::Io) }
 }
 
 pub(crate) struct OpenFdResult {
@@ -45,7 +43,7 @@ pub(crate) fn open_fd(path: &Path, create: bool) -> Result<OpenFdResult, Error> 
     match fd.try_lock_exclusive() {
         Ok(()) => (),
         Err(err) if err.kind() == io::ErrorKind::WouldBlock => return Err(Error::TableLocked),
-        Err(err) => return Err(Error::Io(err))
+        Err(err) => return Err(Error::Io(err)),
     }
     fd.try_lock_exclusive().unwrap();
     fd.lock_exclusive().map_err(Error::Io)?;

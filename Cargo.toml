@@ -1,6 +1,6 @@
 [package]
 name = "rust-persist"
-version = "0.5.0"
+version = "0.1.0"
 authors = ["Dennis Schwerdel <schwerdel@googlemail.com>"]
 description = "Persistent storage for Rust"
 edition = "2018"

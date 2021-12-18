@@ -77,17 +77,17 @@ impl Index {
     }
 
     pub(crate) fn grow_from_half(&mut self) {
-        for entry in &mut self.entries[self.capacity/2..] {
+        for entry in &mut self.entries[self.capacity / 2..] {
             entry.clear()
         }
         self.reinsert(0, self.capacity)
     }
 
     pub(crate) fn shrink_to_half(&mut self) {
-        assert!(self.count <= self.capacity/2);
+        assert!(self.count <= self.capacity / 2);
         self.capacity /= 2;
-        self.mask = self.capacity-1;
-        self.reinsert(self.capacity, 2*self.capacity);
+        self.mask = self.capacity - 1;
+        self.reinsert(self.capacity, 2 * self.capacity);
         self.reinsert_all();
     }
 
@@ -223,7 +223,9 @@ impl Index {
     }
 
     #[inline]
-    pub(crate) fn index_get<F: FnMut(&IndexEntryData) -> bool>(&self, hash: Hash, match_fn: F) -> Option<IndexEntryData> {
+    pub(crate) fn index_get<F: FnMut(&IndexEntryData) -> bool>(
+        &self, hash: Hash, match_fn: F,
+    ) -> Option<IndexEntryData> {
         match self.locate(hash, match_fn) {
             LocateResult::Found(pos) => Some(self.entries[pos].data),
             _ => None,
@@ -231,7 +233,9 @@ impl Index {
     }
 
     #[inline]
-    pub(crate) fn index_delete<F: FnMut(&IndexEntryData) -> bool>(&mut self, hash: Hash, match_fn: F) -> Option<IndexEntryData> {
+    pub(crate) fn index_delete<F: FnMut(&IndexEntryData) -> bool>(
+        &mut self, hash: Hash, match_fn: F,
+    ) -> Option<IndexEntryData> {
         match self.locate(hash, match_fn) {
             LocateResult::Found(pos) => {
                 let entry = self.entries[pos].data;

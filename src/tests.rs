@@ -3,7 +3,7 @@ use std::{cmp, collections::HashMap, mem};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 
-use crate::{hash_key, index::IndexEntry, Header, Table, mmap::open_fd};
+use crate::{hash_key, index::IndexEntry, mmap::open_fd, Header, Table};
 
 type Rand = ChaCha8Rng;
 
@@ -86,11 +86,11 @@ fn test_endianness() {
     let hash = tbl.index.get_entries()[index].hash;
     tbl.close();
     {
-       let mut tbl = open_fd(file.path(), false).unwrap();
-       tbl.header.flags[0] = if tbl.header.flags[0] > 0 { 0 } else { 2 };
-       tbl.header.fix_endianness();
-       tbl.index_entries[index].fix_endianness();
-       tbl.mmap.flush().unwrap();
+        let mut tbl = open_fd(file.path(), false).unwrap();
+        tbl.header.flags[0] = if tbl.header.flags[0] > 0 { 0 } else { 2 };
+        tbl.header.fix_endianness();
+        tbl.index_entries[index].fix_endianness();
+        tbl.mmap.flush().unwrap();
     }
     let tbl = Table::open(file.path()).unwrap();
     assert_eq!(hash, tbl.index.get_entries()[index].hash);

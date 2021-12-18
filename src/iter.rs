@@ -1,4 +1,4 @@
-use crate::{index::IndexEntry, Error, Table, Entry, EntryMut};
+use crate::{index::IndexEntry, Entry, EntryMut, Error, Table};
 
 /// Internal iterator over all entries in a table
 pub struct Iter<'a> {
@@ -20,14 +20,14 @@ impl<'a> Iterator for Iter<'a> {
             if !entry.is_used() {
                 continue;
             }
-            return Some(self.tbl.entry_from_index_data(entry.data))
+            return Some(self.tbl.entry_from_index_data(entry.data));
         }
     }
 }
 
 impl Table {
     /// Returns an iterator over all entries in the table
-    /// 
+    ///
     /// Each entry will be returned exactly once but in no particular order.
     /// The entries are returned as tuples of key and value.
     pub fn iter(&self) -> impl Iterator<Item = Entry<'_>> {
@@ -35,7 +35,7 @@ impl Table {
     }
 
     /// Execute the given method for all entries in the table
-    /// 
+    ///
     /// The method will be executed once for each entry in the table.
     pub fn each<F: FnMut(Entry<'_>)>(&self, mut f: F) {
         for entry in self.iter() {
@@ -44,7 +44,7 @@ impl Table {
     }
 
     /// Execute the given method for all entries in the table
-    /// 
+    ///
     /// The method will be executed once for each entry in the table.
     /// Changes to the values will be directy reflected in the table.
     pub fn each_mut<F: FnMut(EntryMut<'_>)>(&mut self, mut f: F) {
@@ -61,13 +61,13 @@ impl Table {
     }
 
     /// Filters the entries in the table according to the given predicate.
-    /// 
+    ///
     /// If the predicate `f` returns `true` for a key/value pair, the entry will remain in the table, otherwise it will be removed.
     pub fn filter<F: FnMut(Entry<'_>) -> bool>(&mut self, mut f: F) -> Result<(), Error> {
         let mut pos = 0;
         loop {
             if pos >= self.index.capacity() {
-                break
+                break;
             }
             let entry_data = {
                 let entry = &self.index.get_entries()[pos];
@@ -80,7 +80,7 @@ impl Table {
             let key = {
                 let data = self.get_data(entry_data.position, entry_data.size);
                 let (key, value) = data.split_at(entry_data.key_size as usize);
-                if f(Entry{key, value, flags: entry_data.flags}) {
+                if f(Entry { key, value, flags: entry_data.flags }) {
                     pos += 1;
                     continue;
                 }
@@ -94,11 +94,16 @@ impl Table {
     }
 }
 
-#[test]
-fn test_iter() {
-    let file = tempfile::NamedTempFile::new().unwrap();
-    let mut tbl = Table::create(file.path()).unwrap();
-    tbl.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
-    tbl.set("key2".as_bytes(), "value2".as_bytes()).unwrap();
-    assert_eq!(tbl.iter().count(), 2);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_iter() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let mut tbl = Table::create(file.path()).unwrap();
+        tbl.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
+        tbl.set("key2".as_bytes(), "value2".as_bytes()).unwrap();
+        assert_eq!(tbl.iter().count(), 2);
+    }
 }

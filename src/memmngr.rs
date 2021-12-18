@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, ops::Bound, cmp};
+use std::{cmp, collections::BTreeSet, ops::Bound};
 
 use crate::Hash;
 
@@ -30,7 +30,6 @@ impl Free {
     }
 }
 
-
 pub struct MemoryManagment {
     start: Pos,
     end: Pos,
@@ -49,7 +48,7 @@ impl MemoryManagment {
     }
 
     pub(crate) fn set_used(&mut self, start: Pos, size: Size, hash: Hash) {
-        self.used.insert(Used{start, size: cmp::max(size, 1), hash});
+        self.used.insert(Used { start, size: cmp::max(size, 1), hash });
     }
 
     pub(crate) fn fix_up(&mut self) {
@@ -59,12 +58,12 @@ impl MemoryManagment {
         for used in &self.used {
             self.used_size += used.size as u64;
             if used.start != last_end {
-                self.free.insert(Free{size: (used.start - last_end) as Size, start: last_end});
+                self.free.insert(Free { size: (used.start - last_end) as Size, start: last_end });
             }
             last_end = used.end();
         }
         if last_end != self.end {
-            self.free.insert(Free{size: (self.end - last_end) as Size, start: last_end});
+            self.free.insert(Free { size: (self.end - last_end) as Size, start: last_end });
         }
     }
 
@@ -229,7 +228,7 @@ impl MemoryManagment {
     pub(crate) fn is_valid(&self) -> bool {
         let mut valid = true;
         let mut blocks = Vec::with_capacity(self.used.len() + self.free.len());
-        let mut used_size  = 0;
+        let mut used_size = 0;
         for used in &self.used {
             blocks.push((used.start, used.size, true));
             used_size += used.size as u64;
@@ -262,7 +261,7 @@ impl MemoryManagment {
             }
             if last != self.end {
                 println!("Last block does not end at end: {} vs {}", last, self.end);
-                valid = false                
+                valid = false
             }
         }
         if !valid {
@@ -272,120 +271,140 @@ impl MemoryManagment {
         }
         valid
     }
-
-}
-
-
-#[cfg(test)]
-#[derive(Debug)]
-enum Op {
-    Alloc { size: Size, hash: Hash, result: Option<Pos> },
-    Free { pos: Pos, result: bool },
-    SetStart { start: Pos, result: Vec<Used> },
-    SetEnd { end: Pos, result: Vec<Used> },
 }
 
 #[cfg(test)]
-fn run_ops(mem: &mut MemoryManagment, ops: &[Op]) {
-    assert!(mem.is_valid());
-    for op in ops {
-        println!("applying {:?}", op);
-        match *op {
-            Op::Alloc { size, hash, result } => assert_eq!(mem.allocate(size, hash), result),
-            Op::Free { pos, result} => assert_eq!(mem.free(pos), result),
-            Op::SetStart { start, ref result} => assert_eq!(&mem.set_start(start), result),
-            Op::SetEnd { end, ref result} => assert_eq!(&mem.set_end(end), result)
-        };
-        assert!(mem.is_valid());        
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    enum Op {
+        Alloc { size: Size, hash: Hash, result: Option<Pos> },
+        Free { pos: Pos, result: bool },
+        SetStart { start: Pos, result: Vec<Used> },
+        SetEnd { end: Pos, result: Vec<Used> },
     }
-}
 
-#[test]
-fn allocate_free_sequential() {
-    let mut mem = MemoryManagment::new(1000, 2000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 100, hash: 0, result: Some(1000)},
-        Op::Alloc{size: 200, hash: 0, result: Some(1100)},
-        Op::Alloc{size: 400, hash: 0, result: Some(1300)},
-        Op::Alloc{size: 800, hash: 0, result: None},
-        Op::Alloc{size: 300, hash: 0, result: Some(1700)},
-        Op::Alloc{size: 100, hash: 0, result: None},
-        Op::Free{pos: 1000, result: true},
-        Op::Free{pos: 1100, result: true},
-        Op::Free{pos: 1300, result: true},
-        Op::Free{pos: 1700, result: true},
-    ])
-}
+    #[cfg(test)]
+    fn run_ops(mem: &mut MemoryManagment, ops: &[Op]) {
+        assert!(mem.is_valid());
+        for op in ops {
+            println!("applying {:?}", op);
+            match *op {
+                Op::Alloc { size, hash, result } => assert_eq!(mem.allocate(size, hash), result),
+                Op::Free { pos, result } => assert_eq!(mem.free(pos), result),
+                Op::SetStart { start, ref result } => assert_eq!(&mem.set_start(start), result),
+                Op::SetEnd { end, ref result } => assert_eq!(&mem.set_end(end), result),
+            };
+            assert!(mem.is_valid());
+        }
+    }
 
-#[test]
-fn allocate_holes() {
-    let mut mem = MemoryManagment::new(1000, 2000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 400, hash: 0, result: Some(1000)},
-        Op::Alloc{size: 100, hash: 0, result: Some(1400)},     
-        Op::Alloc{size: 300, hash: 0, result: Some(1500)},
-        Op::Alloc{size: 100, hash: 0, result: Some(1800)},
-        Op::Free{pos: 1000, result: true},
-        Op::Free{pos: 1500, result: true},
-        Op::Alloc{size: 350, hash: 0, result: Some(1000)},
-        Op::Alloc{size: 200, hash: 0, result: Some(1500)},
-        Op::Free{pos: 1400, result: true},
-        Op::Free{pos: 1500, result: true},
-        Op::Alloc{size: 400, hash: 0, result: Some(1350)}
-    ])
-}
+    #[test]
+    fn allocate_free_sequential() {
+        let mut mem = MemoryManagment::new(1000, 2000);
+        run_ops(
+            &mut mem,
+            &[
+                Op::Alloc { size: 100, hash: 0, result: Some(1000) },
+                Op::Alloc { size: 200, hash: 0, result: Some(1100) },
+                Op::Alloc { size: 400, hash: 0, result: Some(1300) },
+                Op::Alloc { size: 800, hash: 0, result: None },
+                Op::Alloc { size: 300, hash: 0, result: Some(1700) },
+                Op::Alloc { size: 100, hash: 0, result: None },
+                Op::Free { pos: 1000, result: true },
+                Op::Free { pos: 1100, result: true },
+                Op::Free { pos: 1300, result: true },
+                Op::Free { pos: 1700, result: true },
+            ],
+        )
+    }
 
-#[test]
-fn allocate_prefers_start() {
-    let mut mem = MemoryManagment::new(1000, 2000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 100, hash: 0, result: Some(1000)},
-        Op::Alloc{size: 300, hash: 0, result: Some(1100)},     
-        Op::Alloc{size: 100, hash: 0, result: Some(1400)},
-        Op::Alloc{size: 300, hash: 0, result: Some(1500)},
-        Op::Alloc{size: 100, hash: 0, result: Some(1800)},
-        Op::Free{pos: 1100, result: true},
-        Op::Free{pos: 1500, result: true},
-        Op::Alloc{size: 250, hash: 0, result: Some(1100)},
-        Op::Alloc{size: 250, hash: 0, result: Some(1500)},
-    ])
-}
+    #[test]
+    fn allocate_holes() {
+        let mut mem = MemoryManagment::new(1000, 2000);
+        run_ops(
+            &mut mem,
+            &[
+                Op::Alloc { size: 400, hash: 0, result: Some(1000) },
+                Op::Alloc { size: 100, hash: 0, result: Some(1400) },
+                Op::Alloc { size: 300, hash: 0, result: Some(1500) },
+                Op::Alloc { size: 100, hash: 0, result: Some(1800) },
+                Op::Free { pos: 1000, result: true },
+                Op::Free { pos: 1500, result: true },
+                Op::Alloc { size: 350, hash: 0, result: Some(1000) },
+                Op::Alloc { size: 200, hash: 0, result: Some(1500) },
+                Op::Free { pos: 1400, result: true },
+                Op::Free { pos: 1500, result: true },
+                Op::Alloc { size: 400, hash: 0, result: Some(1350) },
+            ],
+        )
+    }
 
-#[test]
-fn allocate_prefers_better_fit() {
-    let mut mem = MemoryManagment::new(1000, 2000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 100, hash: 0, result: Some(1000)},
-        Op::Alloc{size: 300, hash: 0, result: Some(1100)},     
-        Op::Alloc{size: 100, hash: 0, result: Some(1400)},
-        Op::Alloc{size: 200, hash: 0, result: Some(1500)},
-        Op::Alloc{size: 100, hash: 0, result: Some(1700)},
-        Op::Free{pos: 1100, result: true},
-        Op::Free{pos: 1500, result: true},
-        Op::Alloc{size: 200, hash: 0, result: Some(1500)},
-        Op::Alloc{size: 200, hash: 0, result: Some(1800)},
-        Op::Alloc{size: 200, hash: 0, result: Some(1100)},
-    ])
-}
+    #[test]
+    fn allocate_prefers_start() {
+        let mut mem = MemoryManagment::new(1000, 2000);
+        run_ops(
+            &mut mem,
+            &[
+                Op::Alloc { size: 100, hash: 0, result: Some(1000) },
+                Op::Alloc { size: 300, hash: 0, result: Some(1100) },
+                Op::Alloc { size: 100, hash: 0, result: Some(1400) },
+                Op::Alloc { size: 300, hash: 0, result: Some(1500) },
+                Op::Alloc { size: 100, hash: 0, result: Some(1800) },
+                Op::Free { pos: 1100, result: true },
+                Op::Free { pos: 1500, result: true },
+                Op::Alloc { size: 250, hash: 0, result: Some(1100) },
+                Op::Alloc { size: 250, hash: 0, result: Some(1500) },
+            ],
+        )
+    }
 
-#[test]
-fn increase_end() {
-    let mut mem = MemoryManagment::new(1000, 2000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 500, hash: 0, result: Some(1000)},
-        Op::Alloc{size: 1000, hash: 0, result: None},
-        Op::SetEnd{end: 3000, result: vec![]},
-        Op::Alloc{size: 1000, hash: 0, result: Some(1500)},
-    ])
-}
+    #[test]
+    fn allocate_prefers_better_fit() {
+        let mut mem = MemoryManagment::new(1000, 2000);
+        run_ops(
+            &mut mem,
+            &[
+                Op::Alloc { size: 100, hash: 0, result: Some(1000) },
+                Op::Alloc { size: 300, hash: 0, result: Some(1100) },
+                Op::Alloc { size: 100, hash: 0, result: Some(1400) },
+                Op::Alloc { size: 200, hash: 0, result: Some(1500) },
+                Op::Alloc { size: 100, hash: 0, result: Some(1700) },
+                Op::Free { pos: 1100, result: true },
+                Op::Free { pos: 1500, result: true },
+                Op::Alloc { size: 200, hash: 0, result: Some(1500) },
+                Op::Alloc { size: 200, hash: 0, result: Some(1800) },
+                Op::Alloc { size: 200, hash: 0, result: Some(1100) },
+            ],
+        )
+    }
 
-#[test]
-fn decrease_start() {
-    let mut mem = MemoryManagment::new(1000, 2000);
-    run_ops(&mut mem, &[
-        Op::Alloc{size: 500, hash: 0, result: Some(1000)},
-        Op::Alloc{size: 1000, hash: 0, result: None},
-        Op::SetStart{start: 0, result: vec![]},
-        Op::Alloc{size: 1000, hash: 0, result: Some(0)},
-    ])
+    #[test]
+    fn increase_end() {
+        let mut mem = MemoryManagment::new(1000, 2000);
+        run_ops(
+            &mut mem,
+            &[
+                Op::Alloc { size: 500, hash: 0, result: Some(1000) },
+                Op::Alloc { size: 1000, hash: 0, result: None },
+                Op::SetEnd { end: 3000, result: vec![] },
+                Op::Alloc { size: 1000, hash: 0, result: Some(1500) },
+            ],
+        )
+    }
+
+    #[test]
+    fn decrease_start() {
+        let mut mem = MemoryManagment::new(1000, 2000);
+        run_ops(
+            &mut mem,
+            &[
+                Op::Alloc { size: 500, hash: 0, result: Some(1000) },
+                Op::Alloc { size: 1000, hash: 0, result: None },
+                Op::SetStart { start: 0, result: vec![] },
+                Op::Alloc { size: 1000, hash: 0, result: Some(0) },
+            ],
+        )
+    }
 }

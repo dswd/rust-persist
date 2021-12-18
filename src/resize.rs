@@ -31,10 +31,10 @@ impl Table {
     }
 
     /// Forces the defragmentation of the data section.
-    /// 
+    ///
     /// This method will move all data chunks to the front and remove all gaps between them.
     /// After this, the free space at the end will be truncated to save space.
-    /// 
+    ///
     /// This method is automatically called when the used space of the data section is less than 50%
     pub fn defragment(&mut self) -> Result<(), Error> {
         debug_assert!(self.is_valid(), "Invalid before shrink data");
@@ -123,67 +123,72 @@ impl Table {
     }
 }
 
-#[test]
-fn extend_data() {
-    let file = tempfile::NamedTempFile::new().unwrap();
-    let mut tbl = Table::create(file.path()).unwrap();
-    let key1 = [0; 1024];
-    let key2 = [1; 1024];
-    let data = [0; 1024 * 10];
-    tbl.set(&key1, &data).unwrap();
-    assert!(tbl.is_valid());
-    tbl.set(&key2, &data).unwrap();
-    assert!(tbl.is_valid());
-    tbl.close();
-    let tbl = Table::open(file.path()).unwrap();
-    assert!(tbl.is_valid());
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn shrink_data() {
-    let file = tempfile::NamedTempFile::new().unwrap();
-    let mut tbl = Table::create(file.path()).unwrap();
-    let key = [0; 1024];
-    let data = [0; 1024 * 10];
-    tbl.set(&key, &data).unwrap();
-    assert!(tbl.is_valid());
-    assert!(tbl.delete(&key).unwrap().is_some());
-    assert!(tbl.is_valid());
-    tbl.close();
-    let tbl = Table::open(file.path()).unwrap();
-    assert!(tbl.is_valid());
-}
-
-#[test]
-fn extend_index() {
-    let file = tempfile::NamedTempFile::new().unwrap();
-    let mut tbl = Table::create(file.path()).unwrap();
-    let data = [0; 100];
-    for i in 0u16..150 {
-        tbl.set(&i.to_ne_bytes(), &data).unwrap();
+    #[test]
+    fn extend_data() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let mut tbl = Table::create(file.path()).unwrap();
+        let key1 = [0; 1024];
+        let key2 = [1; 1024];
+        let data = [0; 1024 * 10];
+        tbl.set(&key1, &data).unwrap();
+        assert!(tbl.is_valid());
+        tbl.set(&key2, &data).unwrap();
+        assert!(tbl.is_valid());
+        tbl.close();
+        let tbl = Table::open(file.path()).unwrap();
         assert!(tbl.is_valid());
     }
-    assert!(tbl.index.capacity() > INITIAL_INDEX_CAPACITY);
-    tbl.close();
-    let tbl = Table::open(file.path()).unwrap();
-    assert!(tbl.is_valid());
-}
 
-#[test]
-fn shrink_index() {
-    let file = tempfile::NamedTempFile::new().unwrap();
-    let mut tbl = Table::create(file.path()).unwrap();
-    let data = [0; 100];
-    for i in 0u16..150 {
-        tbl.set(&i.to_ne_bytes(), &data).unwrap();
+    #[test]
+    fn shrink_data() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let mut tbl = Table::create(file.path()).unwrap();
+        let key = [0; 1024];
+        let data = [0; 1024 * 10];
+        tbl.set(&key, &data).unwrap();
+        assert!(tbl.is_valid());
+        assert!(tbl.delete(&key).unwrap().is_some());
+        assert!(tbl.is_valid());
+        tbl.close();
+        let tbl = Table::open(file.path()).unwrap();
+        assert!(tbl.is_valid());
     }
-    assert!(tbl.is_valid());
-    assert!(tbl.index.capacity() > INITIAL_INDEX_CAPACITY);
-    for i in 0u16..150 {
-        tbl.delete(&i.to_ne_bytes()).unwrap();
+
+    #[test]
+    fn extend_index() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let mut tbl = Table::create(file.path()).unwrap();
+        let data = [0; 100];
+        for i in 0u16..150 {
+            tbl.set(&i.to_ne_bytes(), &data).unwrap();
+            assert!(tbl.is_valid());
+        }
+        assert!(tbl.index.capacity() > INITIAL_INDEX_CAPACITY);
+        tbl.close();
+        let tbl = Table::open(file.path()).unwrap();
+        assert!(tbl.is_valid());
     }
-    assert!(tbl.index.capacity() == INITIAL_INDEX_CAPACITY);
-    tbl.close();
-    let tbl = Table::open(file.path()).unwrap();
-    assert!(tbl.is_valid());
+
+    #[test]
+    fn shrink_index() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let mut tbl = Table::create(file.path()).unwrap();
+        let data = [0; 100];
+        for i in 0u16..150 {
+            tbl.set(&i.to_ne_bytes(), &data).unwrap();
+        }
+        assert!(tbl.is_valid());
+        assert!(tbl.index.capacity() > INITIAL_INDEX_CAPACITY);
+        for i in 0u16..150 {
+            tbl.delete(&i.to_ne_bytes()).unwrap();
+        }
+        assert!(tbl.index.capacity() == INITIAL_INDEX_CAPACITY);
+        tbl.close();
+        let tbl = Table::open(file.path()).unwrap();
+        assert!(tbl.is_valid());
+    }
 }
