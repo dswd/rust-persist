@@ -11,21 +11,21 @@
 //!
 //! The used algorithms are optimized for performance so that the data storage should be faster that a regular
 //! database.
-//! 
+//!
 //! ## Simple storage
 //! ```
 //! use rust_persist::Table;
-//! 
+//!
 //! let mut table = Table::create("example1.tbl").expect("Failed to create table");
 //! table.set("hello".as_bytes(), "world".as_bytes()).expect("Failed to store value");
 //! assert_eq!(table.get("hello".as_bytes()), Some("world".as_bytes()));
 //! table.delete("hello".as_bytes()).expect("Failed to delete value");
 //! ```
-//! 
+//!
 //! ## Iterating over table values
 //! ```
 //! use rust_persist::Table;
-//! 
+//!
 //! let mut table = Table::create("example2.tbl").unwrap();
 //! table.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
 //! table.set("key2".as_bytes(), "value2".as_bytes()).unwrap();
@@ -33,11 +33,11 @@
 //!   println!("{}: {}", String::from_utf8_lossy(entry.key), String::from_utf8_lossy(entry.value));
 //! }
 //! ```
-//! 
+//!
 //! ## Working with serialized data
 //! ```
 //! use rust_persist::Table;
-//! 
+//!
 //! let mut table = Table::create("example3.tbl").unwrap();
 //! table.set_obj("key1", vec![1,2,3]).unwrap();
 //! table.set_obj("key2", (true, "string".to_string())).unwrap();
@@ -62,7 +62,7 @@ mod resize;
 mod tests;
 
 #[cfg(feature = "msgpack")]
-pub use msgpack::{serialize, deserialize, TypedTable};
+pub use msgpack::{deserialize, serialize, TypedTable};
 use siphasher::sip::SipHasher13;
 
 const INDEX_HEADER: [u8; 16] = *b"rust-persist-01\n";
@@ -71,6 +71,11 @@ const MAX_USAGE: f64 = 0.9;
 const MIN_USAGE: f64 = 0.35;
 const INITIAL_INDEX_CAPACITY: usize = 128;
 const INITIAL_DATA_SIZE: usize = 0;
+
+fn is_be() -> bool {
+    1001u16.to_be() == 1001u16
+}
+
 
 #[derive(Debug)]
 /// Error type
@@ -102,7 +107,17 @@ impl Header {
 
     #[inline]
     pub fn set_dirty(&mut self, dirty: bool) {
-        self.flags[0] = self.flags[0] & 0xfe | if dirty { 1 } else { 0 }
+        self.flags[0] = self.flags[0] & 0b11111110 | if dirty { 1 } else { 0 }
+    }
+
+    #[inline]
+    pub fn has_correct_endianness(&self) -> bool {
+        ((self.flags[0] & 2) > 0) == is_be()
+    }
+
+    #[inline]
+    pub fn set_correct_endianness(&mut self) {
+        self.flags[0] = self.flags[0] & 0b11111101 | if is_be() { 2 } else { 0 }
     }
 }
 
@@ -128,7 +143,6 @@ fn match_key(entry: &IndexEntryData, data: &[u8], data_start: u64, key: &[u8]) -
     &data[start..end] == key
 }
 
-
 /// An entry in the table
 pub struct Entry<'a> {
     /// Flags stored with the entry
@@ -144,7 +158,7 @@ pub struct Entry<'a> {
 /// An entry in the table with mutable value
 pub struct EntryMut<'a> {
     /// Flags stored with the entry
-    /// 
+    ///
     /// Modifications to this field are not reflected in the table
     pub flags: u16,
 
@@ -152,7 +166,7 @@ pub struct EntryMut<'a> {
     pub key: &'a [u8],
 
     /// The value of the entry
-    /// 
+    ///
     /// Modifications to this value are reflected in the table
     pub value: &'a mut [u8],
 }
@@ -189,6 +203,12 @@ impl Table {
             opened_fd.data_start as u64,
             opened_fd.data_start as u64 + opened_fd.data.len() as u64,
         );
+        if !opened_fd.header.has_correct_endianness() {
+            for entry in opened_fd.index_entries.iter_mut() {
+                entry.fix_endianness()
+            }
+            opened_fd.header.set_correct_endianness();
+        }
         let mut count = 0;
         for entry in opened_fd.index_entries.iter_mut() {
             if entry.is_used() {
@@ -327,10 +347,9 @@ impl Table {
     /// If the returned value is modified, it directly affects the stored value.
     pub fn get_entry_mut(&mut self, key: &[u8]) -> Option<EntryMut<'_>> {
         let hash = hash_key(key);
-        match self.index.index_get(hash, |e| match_key(e, self.data, self.data_start, key)) {
-            Some(entry) => Some(self.entry_mut_from_index_data(entry)),
-            None => None,
-        }
+        self.index
+            .index_get(hash, |e| match_key(e, self.data, self.data_start, key))
+            .map(move |entry| self.entry_mut_from_index_data(entry))
     }
 
     /// Retrieves and returns the value associated with the given key.
@@ -373,9 +392,9 @@ impl Table {
         match result {
             Some(old) => {
                 self.free_data(old.position);
-                Ok(Some(self.entry_mut_from_index_data(old)))                
-            },
-            None => Ok(None)
+                Ok(Some(self.entry_mut_from_index_data(old)))
+            }
+            None => Ok(None),
         }
     }
 
@@ -439,9 +458,9 @@ impl Table {
         match result {
             Some(old) => {
                 self.free_data(old.position);
-                Some(self.entry_mut_from_index_data(old)) 
-            },
-            None => None
+                Some(self.entry_mut_from_index_data(old))
+            }
+            None => None,
         }
     }
 

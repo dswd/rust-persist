@@ -54,6 +54,7 @@ pub(crate) fn open_fd(path: &Path, create: bool) -> Result<OpenFdResult, Error> 
         // This is safe, nothing in header is Drop
         header.header = INDEX_HEADER;
         header.index_capacity = INITIAL_INDEX_CAPACITY as u32;
+        header.set_correct_endianness();
     }
     if header.header != INDEX_HEADER {
         return Err(Error::WrongHeader);

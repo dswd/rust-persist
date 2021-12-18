@@ -27,6 +27,14 @@ impl IndexEntry {
     pub(crate) fn clear(&mut self) {
         self.hash = 0
     }
+
+    pub(crate) fn fix_endianness(&mut self) {
+        self.hash = self.hash.to_le().to_be();
+        self.data.position = self.data.position.to_le().to_be();
+        self.data.size = self.data.size.to_le().to_be();
+        self.data.key_size = self.data.key_size.to_le().to_be();
+        self.data.flags = self.data.flags.to_le().to_be();
+    }
 }
 
 #[derive(Debug)]

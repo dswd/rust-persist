@@ -3,7 +3,7 @@ use std::{cmp, collections::HashMap, mem};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 
-use crate::{hash_key, index::IndexEntry, Header, Table};
+use crate::{hash_key, index::IndexEntry, Header, Table, mmap::open_fd};
 
 type Rand = ChaCha8Rng;
 
@@ -75,6 +75,25 @@ fn test_zero_size() {
     tbl.set(&[], "no key".as_bytes()).unwrap();
     assert!(tbl.is_valid());
     assert_eq!(tbl.get(&[]), Some("no key".as_bytes()));
+}
+
+#[test]
+fn test_endianness() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut tbl = Table::create(file.path()).unwrap();
+    tbl.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
+    let index = tbl.index.get_entries().iter().enumerate().find(|(_, entry)| entry.is_used()).unwrap().0;
+    let hash = tbl.index.get_entries()[index].hash;
+    tbl.close();
+    {
+       let mut tbl = open_fd(file.path(), false).unwrap();
+       tbl.header.flags[0] = if tbl.header.flags[0] > 0 { 0 } else { 2 };
+       tbl.index_entries[index].fix_endianness();
+       tbl.mmap.flush().unwrap();
+    }
+    let tbl = Table::open(file.path()).unwrap();
+    assert_eq!(hash, tbl.index.get_entries()[index].hash);
+    assert_eq!(tbl.get("key1".as_bytes()), Some("value1".as_bytes()));
 }
 
 fn test_one_seed(seed: u64) {
