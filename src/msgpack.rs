@@ -96,7 +96,7 @@ impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item = Entry<'a>>
 /// If you want to enable serialization for custom structs and types, you can either implement 
 /// [`serde::Serialize`] and [`serde::Deserialize`] directly or use [the `derive` feature of `serde`](https://serde.rs/derive.html).
 /// 
-/// If any key or value cannot be encoded or decoded, [`Error::Encode`] or [`Error::Decode`] is thrown.
+/// If any key or value cannot be encoded or decoded, [`Error::Serialize`] or [`Error::Deserialize`] is thrown.
 pub struct TypedTable<K, V> {
     inner: Table,
     _key: PhantomData<K>,

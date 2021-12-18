@@ -11,6 +11,39 @@
 //!
 //! The used algorithms are optimized for performance so that the data storage should be faster that a regular
 //! database.
+//! 
+//! ## Simple storage
+//! ```
+//! use rust_persist::Table;
+//! 
+//! let mut table = Table::create("example1.tbl").expect("Failed to create table");
+//! table.set("hello".as_bytes(), "world".as_bytes()).expect("Failed to store value");
+//! assert_eq!(table.get("hello".as_bytes()), Some("world".as_bytes()));
+//! table.delete("hello".as_bytes()).expect("Failed to delete value");
+//! ```
+//! 
+//! ## Iterating over table values
+//! ```
+//! use rust_persist::Table;
+//! 
+//! let mut table = Table::create("example2.tbl").unwrap();
+//! table.set("key1".as_bytes(), "value1".as_bytes()).unwrap();
+//! table.set("key2".as_bytes(), "value2".as_bytes()).unwrap();
+//! for entry in table.iter() {
+//!   println!("{}: {}", String::from_utf8_lossy(entry.key), String::from_utf8_lossy(entry.value));
+//! }
+//! ```
+//! 
+//! ## Working with serialized data
+//! ```
+//! use rust_persist::Table;
+//! 
+//! let mut table = Table::create("example3.tbl").unwrap();
+//! table.set_obj("key1", vec![1,2,3]).unwrap();
+//! table.set_obj("key2", (true, "string".to_string())).unwrap();
+//! assert_eq!(table.get_obj("key1").unwrap(), Some(vec![1,2,3]));
+//! assert_eq!(table.get_obj("key2").unwrap(), Some((true, "string".to_string())));
+//! ```
 
 use std::{cmp, fs::File, hash::Hasher, io, mem, path::Path};
 
