@@ -1,14 +1,14 @@
-use crate::{index::Entry, Error, Table};
+use crate::{index::IndexEntry, Error, Table, Entry, EntryMut};
 
 /// Internal iterator over all entries in a table
 pub struct Iter<'a> {
     pos: usize,
-    entries: &'a [Entry],
+    entries: &'a [IndexEntry],
     tbl: &'a Table,
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = (&'a [u8], &'a [u8]);
+    type Item = Entry<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -20,9 +20,7 @@ impl<'a> Iterator for Iter<'a> {
             if !entry.is_used() {
                 continue;
             }
-            let data = self.tbl.get_data(entry.data.position, entry.data.size);
-            let (key, value) = data.split_at(entry.data.key_size as usize);
-            return Some((key, value));
+            return Some(self.tbl.entry_from_index_data(entry.data))
         }
     }
 }
@@ -32,16 +30,16 @@ impl Table {
     /// 
     /// Each entry will be returned exactly once but in no particular order.
     /// The entries are returned as tuples of key and value.
-    pub fn iter(&self) -> impl Iterator<Item = (&[u8], &[u8])> {
+    pub fn iter(&self) -> impl Iterator<Item = Entry<'_>> {
         Iter { pos: 0, entries: self.index.get_entries(), tbl: self }
     }
 
     /// Execute the given method for all entries in the table
     /// 
     /// The method will be executed once for each entry in the table.
-    pub fn each<F: FnMut(&[u8], &[u8])>(&self, mut f: F) {
-        for (k, v) in self.iter() {
-            f(k, v)
+    pub fn each<F: FnMut(Entry<'_>)>(&self, mut f: F) {
+        for entry in self.iter() {
+            f(entry)
         }
     }
 
@@ -49,7 +47,7 @@ impl Table {
     /// 
     /// The method will be executed once for each entry in the table.
     /// Changes to the values will be directy reflected in the table.
-    pub fn each_mut<F: FnMut(&[u8], &mut [u8])>(&mut self, mut f: F) {
+    pub fn each_mut<F: FnMut(EntryMut<'_>)>(&mut self, mut f: F) {
         for pos in 0..self.index.capacity() {
             let entry_data = {
                 let entry = &self.index.get_entries()[pos];
@@ -58,20 +56,18 @@ impl Table {
                 }
                 entry.data
             };
-            let data = self.get_data_mut(entry_data.position, entry_data.size);
-            let (key, value) = data.split_at_mut(entry_data.key_size as usize);
-            f(key, value)
+            f(self.entry_mut_from_index_data(entry_data))
         }
     }
 
     /// Filters the entries in the table according to the given predicate.
     /// 
     /// If the predicate `f` returns `true` for a key/value pair, the entry will remain in the table, otherwise it will be removed.
-    pub fn filter<F: FnMut(&[u8], &[u8]) -> bool>(&mut self, mut f: F) -> Result<(), Error> {
+    pub fn filter<F: FnMut(Entry<'_>) -> bool>(&mut self, mut f: F) -> Result<(), Error> {
         let mut pos = 0;
         loop {
             if pos >= self.index.capacity() {
-                return Ok(());
+                break
             }
             let entry_data = {
                 let entry = &self.index.get_entries()[pos];
@@ -84,15 +80,17 @@ impl Table {
             let key = {
                 let data = self.get_data(entry_data.position, entry_data.size);
                 let (key, value) = data.split_at(entry_data.key_size as usize);
-                if f(key, value) {
+                if f(Entry{key, value, flags: entry_data.flags}) {
                     pos += 1;
                     continue;
                 }
                 key.to_vec()
             };
-            self.delete(&key)?;
-            //FIXME: if this shrinks the index, we might miss some entries
+            self.delete_entry_no_shrink(&key);
         }
+        self.maybe_shrink_index()?;
+        self.maybe_shrink_data()?;
+        Ok(())
     }
 }
 

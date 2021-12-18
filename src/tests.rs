@@ -3,7 +3,7 @@ use std::{cmp, collections::HashMap, mem};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 
-use crate::{hash_key, index::Entry, Header, Table};
+use crate::{hash_key, index::IndexEntry, Header, Table};
 
 type Rand = ChaCha8Rng;
 
@@ -23,8 +23,8 @@ fn random_data(rand: &mut Rand, max_size: usize) -> Vec<u8> {
 #[test]
 fn test_size() {
     assert_eq!(36, mem::size_of::<Header>());
-    assert_eq!(24, mem::size_of::<Entry>());
-    assert_eq!(24576, mem::size_of::<[Entry; 1024]>());
+    assert_eq!(24, mem::size_of::<IndexEntry>());
+    assert_eq!(24576, mem::size_of::<[IndexEntry; 1024]>());
 }
 
 #[test]

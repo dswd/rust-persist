@@ -2,7 +2,21 @@ use std::{marker::PhantomData, path::Path};
 
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{Error, Table};
+use crate::{Error, Table, Entry};
+
+
+/// Method used internally to serialize values to bytes
+#[inline]
+pub fn serialize<T: Serialize>(val: T) -> Result<Vec<u8>, Error> {
+    rmp_serde::to_vec(&val).map_err(Error::Serialize)
+}
+
+/// Method used internally to deserialize values from bytes
+#[inline]
+pub fn deserialize<T: DeserializeOwned>(data: &[u8]) -> Result<T, Error> {
+    rmp_serde::from_read(data).map_err(Error::Deserialize)
+}
+
 
 impl Table {
 
@@ -12,10 +26,9 @@ impl Table {
     /// If the key cannot be encoded or the value cannot be decoded, `Err` is returned.
     /// 
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
-    pub fn get_obj<K: Serialize, V: DeserializeOwned>(&self, k: K) -> Result<Option<V>, Error> {
-        let key = rmp_serde::to_vec(&k).map_err(Error::Encode)?;
-        match self.get(&key) {
-            Some(v) => Ok(Some(rmp_serde::from_read(v).map_err(Error::Decode)?)),
+    pub fn get_obj<K: Serialize, V: DeserializeOwned>(&self, key: K) -> Result<Option<V>, Error> {
+        match self.get(&serialize(key)?) {
+            Some(v) => Ok(Some(deserialize(v)?)),
             None => Ok(None)
         }
     }
@@ -29,10 +42,8 @@ impl Table {
     /// If the table file cannot be extended (e.g. due to no space on device), the method will return an `Err` result.
     /// 
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
-    pub fn set_obj<K: Serialize, V: Serialize>(&mut self, k: K, v: V) -> Result<bool, Error> {
-        let key = rmp_serde::to_vec(&k).map_err(Error::Encode)?;
-        let value = rmp_serde::to_vec(&v).map_err(Error::Encode)?;
-        self.set(&key, &value).map(|v| v.is_some())
+    pub fn set_obj<K: Serialize, V: Serialize>(&mut self, key: K, value: V) -> Result<bool, Error> {
+        self.set(&serialize(key)?, &serialize(value)?).map(|v| v.is_some())
     }
 
     /// Deletes the entry with the given key from the table.
@@ -44,9 +55,8 @@ impl Table {
     /// If the table file cannot be resized, the method will return an `Err` result.
     /// 
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
-    pub fn delete_obj<K: Serialize>(&mut self, k: K) -> Result<bool, Error> {
-        let key = rmp_serde::to_vec(&k).map_err(Error::Encode)?;
-        self.delete(&key).map(|v| v.is_some())
+    pub fn delete_obj<K: Serialize>(&mut self, key: K) -> Result<bool, Error> {
+        self.delete(&serialize(key)?).map(|v| v.is_some())
     }
 }
 
@@ -58,14 +68,14 @@ pub struct Iter<K, V, I> {
     _value: PhantomData<V>,
 }
 
-impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item = (&'a [u8], &'a [u8])>> Iterator
+impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item = Entry<'a>>> Iterator
     for Iter<K, V, I>
 {
     type Item = Result<(K, V), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|(k, v)| {
-            Ok((rmp_serde::from_read(k).map_err(Error::Decode)?, rmp_serde::from_read(v).map_err(Error::Decode)?))
+        self.inner.next().map(|entry| {
+            Ok((deserialize(entry.key)?, deserialize(entry.value)?))
         })
     }
 }
@@ -94,104 +104,104 @@ pub struct TypedTable<K, V> {
 }
 
 impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTable<K, V> {
-    #[inline]
     /// Opens an existing typed table from the given path.
+    #[inline]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         Ok(Self { inner: Table::open(path)?, _key: PhantomData, _value: PhantomData })
     }
 
-    #[inline]
     /// Creates a new typed table at the given path (overwriting an existing table).
+    #[inline]
     pub fn create<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         Ok(Self { inner: Table::create(path)?, _key: PhantomData, _value: PhantomData })
     }
 
-    #[inline]
     /// Returns a reference to the wrapped [`Table`].
+    #[inline]
     pub fn inner(&self) -> &Table {
         &self.inner
     }
 
-    #[inline]
     /// Returns the wrapped [`Table`].
+    #[inline]
     pub fn into_inner(self) -> Table {
         self.inner
     }
 
-    #[inline]
     /// Loads and returns the value stored with the given key.
     /// 
     /// See [`Table::get_obj`] for more info
+    #[inline]
     pub fn get(&self, key: K) -> Result<Option<V>, Error> {
         self.inner.get_obj(key)
     }
 
-    #[inline]
     /// Stores the given key/value pair in the table.
     /// 
     /// See [`Table::set_obj`] for more info
+    #[inline]
     pub fn set(&mut self, key: K, value: V) -> Result<bool, Error> {
         self.inner.set_obj(key, value)
     }
 
-    #[inline]
     /// Deletes the entry with the given key from the table.
     /// 
     /// See [`Table::delete_obj`] for more info
+    #[inline]
     pub fn delete(&mut self, key: K) -> Result<bool, Error> {
         self.inner.delete_obj(key)
     }
 
-    #[inline]
     /// Iterate over all entries in the typed table
+    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = Result<(K, V), Error>> + '_ {
         Iter { inner: self.inner.iter(), _key: PhantomData, _value: PhantomData }
     }
 
-    #[inline]
     /// Return the number of entries in the table
+    #[inline]
     pub fn len(&self) -> usize {
         self.inner.len()
     }
 
-    #[inline]
     /// Return the raw size of the table in bytes
+    #[inline]
     pub fn size(&self) -> u64 {
         self.inner.len() as u64
     }
 
-    #[inline]
     /// Return whether the table is empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.inner.len() == 0
     }
 
-    #[inline]
     /// Forces to write all pending changes to disk
+    #[inline]
     pub fn flush(&mut self) -> Result<(), Error> {
         self.inner.flush()
     }
 
-    #[inline]
     /// Forces defragmentation of the data section.
     /// 
     /// See [`Table::defragment`] for more info.
+    #[inline]
     pub fn defragment(&mut self) -> Result<(), Error> {
         self.inner.defragment()
     }
 
-    #[inline]
     /// Explicitly closes the table.
     /// 
     /// Normally this method does not need to be called.
+    #[inline]
     pub fn close(self) {
         self.inner.close()
     }
 
-    #[inline]
     /// Deletes all entries in the table
     /// 
     /// This method essentially resets the table to its state after creation.
+    #[inline]
     pub fn clear(&mut self) -> Result<(), Error> {
         self.inner.clear()
     }

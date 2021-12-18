@@ -14,7 +14,7 @@
 
 use std::{cmp, fs::File, hash::Hasher, io, mem, path::Path};
 
-use index::{Entry, EntryData, Hash, Index};
+use index::{Hash, Index, IndexEntry, IndexEntryData};
 use memmngr::{MemoryManagment, Used};
 use mmap::MMap;
 
@@ -29,7 +29,7 @@ mod resize;
 mod tests;
 
 #[cfg(feature = "msgpack")]
-pub use msgpack::TypedTable;
+pub use msgpack::{serialize, deserialize, TypedTable};
 use siphasher::sip::SipHasher13;
 
 const INDEX_HEADER: [u8; 16] = *b"rust-persist-01\n";
@@ -46,12 +46,12 @@ pub enum Error {
     Io(io::Error),
     /// The given file is not a valid table, as it has an invalid header
     WrongHeader,
-    #[cfg(feature="msgpack")]
-    /// A key or value could not be decoded
-    Decode(rmp_serde::decode::Error),
-    #[cfg(feature="msgpack")]
-    /// A key or value could not be encoded
-    Encode(rmp_serde::encode::Error)
+    #[cfg(feature = "msgpack")]
+    /// A key or value could not be deserialized
+    Deserialize(rmp_serde::decode::Error),
+    #[cfg(feature = "msgpack")]
+    /// A key or value could not be serialized
+    Serialize(rmp_serde::encode::Error),
 }
 
 #[repr(C)]
@@ -75,7 +75,7 @@ impl Header {
 
 #[inline]
 fn total_size(index_capacity: usize, data_size: u64) -> u64 {
-    mem::size_of::<Header>() as u64 + index_capacity as u64 * mem::size_of::<Entry>() as u64 + data_size
+    mem::size_of::<Header>() as u64 + index_capacity as u64 * mem::size_of::<IndexEntry>() as u64 + data_size
 }
 
 #[inline]
@@ -86,7 +86,7 @@ fn hash_key(key: &[u8]) -> Hash {
 }
 
 #[inline]
-fn match_key(entry: &EntryData, data: &[u8], data_start: u64, key: &[u8]) -> bool {
+fn match_key(entry: &IndexEntryData, data: &[u8], data_start: u64, key: &[u8]) -> bool {
     if key.is_empty() && entry.key_size == 0 {
         return true;
     }
@@ -96,18 +96,46 @@ fn match_key(entry: &EntryData, data: &[u8], data_start: u64, key: &[u8]) -> boo
 }
 
 
+/// An entry in the table
+pub struct Entry<'a> {
+    /// Flags stored with the entry
+    pub flags: u16,
+
+    /// The key of the entry
+    pub key: &'a [u8],
+
+    /// The value of the entry
+    pub value: &'a [u8],
+}
+
+/// An entry in the table with mutable value
+pub struct EntryMut<'a> {
+    /// Flags stored with the entry
+    /// 
+    /// Modifications to this field are not reflected in the table
+    pub flags: u16,
+
+    /// The key of the entry
+    pub key: &'a [u8],
+
+    /// The value of the entry
+    /// 
+    /// Modifications to this value are reflected in the table
+    pub value: &'a mut [u8],
+}
+
 /// A persistent hash table mapping key/value of type `&[u8]`.
-/// 
+///
 /// This is the main struct of the crate. It manages two data structures:
 /// 1) the "Index", a hash table containing the addresses of key/value data,
 /// 2) and the data section, a memory managed area of data where all key/value data is actually stored.
-/// 
+///
 /// The index uses a similar algorithm as [`std::collections::HashMap`], optimized for on-disc storage.
 /// The hash algorithm is defined as SipHasher13 (which is also the default in Rust as of writing).
 /// The index is automatically resized to keep its usage between 40% and 90%. This should keep the hash table efficient.
-/// 
+///
 /// The data section uses B-Tree structures to track free and used data blocks in order to allocate and free memory regions in the data area.
-/// This data section is extended when needed and shrinked (by moving data blocks to the front and truncating the free data at the end) 
+/// This data section is extended when needed and shrinked (by moving data blocks to the front and truncating the free data at the end)
 /// whenever less than 50% of the data section is used.
 pub struct Table {
     fd: File,
@@ -161,17 +189,17 @@ impl Table {
         Ok(tbl)
     }
 
-    #[inline]
     /// Open an existing table from the given path.
     ///
     /// Warning: Concurrent uses of the same table will result in data loss and other weird/unsafe behaviour.
     /// Make sure to only open the table once.
+    #[inline]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         Self::new_index(path.as_ref(), false)
     }
 
-    #[inline]
     /// Creates a new empty table. If the file exists, it will be overwritten.
+    #[inline]
     pub fn create<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         Self::new_index(path.as_ref(), true)
     }
@@ -212,52 +240,112 @@ impl Table {
         &mut self.data[(pos - self.data_start) as usize..(pos + len as u64 - self.data_start) as usize]
     }
 
-    #[inline]
     /// Returns the number of key/value pairs stored in the table.
+    #[inline]
     pub fn len(&self) -> usize {
         self.index.len()
     }
 
-    #[inline]
     /// Returns the raw size of the table in bytes.
+    #[inline]
     pub fn size(&self) -> u64 {
         self.mmap.len() as u64
     }
 
-    #[inline]
     /// Returns whether the table is empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.index.len() == 0
     }
 
-    #[inline]
     /// Forces to write all pending changes to disk
+    #[inline]
     pub fn flush(&self) -> Result<(), Error> {
         self.mmap.flush().map_err(Error::Io)
     }
 
-    #[inline]
+    pub(crate) fn entry_from_index_data(&self, entry: IndexEntryData) -> Entry<'_> {
+        let data = self.get_data(entry.position, entry.size);
+        let (key, value) = data.split_at(entry.key_size as usize);
+        Entry { key, value, flags: entry.flags }
+    }
+
+    pub(crate) fn entry_mut_from_index_data(&mut self, entry: IndexEntryData) -> EntryMut<'_> {
+        let data = self.get_data_mut(entry.position, entry.size);
+        let (key, value) = data.split_at_mut(entry.key_size as usize);
+        EntryMut { key, value, flags: entry.flags }
+    }
+
+    /// Retrieves and returns the entry associated with the given key.
+    /// If no entry with the given key is stored in the table, `None` is returned.
+    pub fn get_entry(&self, key: &[u8]) -> Option<Entry<'_>> {
+        let hash = hash_key(key);
+        self.index
+            .index_get(hash, |e| match_key(e, self.data, self.data_start, key))
+            .map(|e| self.entry_from_index_data(e))
+    }
+
     /// Retrieves and returns the value associated with the given key.
     /// If no entry with the given key is stored in the table, `None` is returned.
+    #[inline]
     pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
+        self.get_entry(key).map(|e| e.value)
+    }
+
+    /// Retrieves and returns the entry associated with the given key.
+    /// If no entry with the given key is stored in the table, `None` is returned.
+    /// If the returned value is modified, it directly affects the stored value.
+    pub fn get_entry_mut(&mut self, key: &[u8]) -> Option<EntryMut<'_>> {
         let hash = hash_key(key);
-        if let Some(entry) = self.index.index_get(hash, |e| match_key(e, self.data, self.data_start, key)) {
-            Some(self.get_data(entry.position + entry.key_size as u64, entry.size - entry.key_size as u32))
-        } else {
-            None
+        match self.index.index_get(hash, |e| match_key(e, self.data, self.data_start, key)) {
+            Some(entry) => Some(self.entry_mut_from_index_data(entry)),
+            None => None,
         }
     }
 
-    #[inline]
     /// Retrieves and returns the value associated with the given key.
     /// If no entry with the given key is stored in the table, `None` is returned.
-    /// If the returned data is modified, it directly affects the stored value.
+    /// If the returned value is modified, it directly affects the stored value.
+    #[inline]
     pub fn get_mut(&mut self, key: &[u8]) -> Option<&mut [u8]> {
-        let hash = hash_key(key);
-        if let Some(entry) = self.index.index_get(hash, |e| match_key(e, self.data, self.data_start, key)) {
-            Some(self.get_data_mut(entry.position + entry.key_size as u64, entry.size - entry.key_size as u32))
-        } else {
-            None
+        self.get_entry_mut(key).map(|e| e.value)
+    }
+
+    /// Stores the given entry in the table.
+    ///
+    /// If another entry is already stored for the key, this old entry will be removed from the table and returned.
+    /// The returned reference is valid until another modification is made to the table.
+    /// If the key is new ot the table, `None` is returned.
+    ///
+    /// Internally, a copy-on-write method is used instead of overwriting existing values. Therefore old values might
+    /// be visible in the raw table file until a defragmentation happens.
+    ///
+    /// This method might increase the size of the internal index or the data section as needed.
+    /// If the table file cannot be extended (e.g. due to no space on device), the method will return an `Err` result.
+    pub fn set_entry<'a>(&mut self, entry: Entry<'a>) -> Result<Option<EntryMut<'_>>, Error> {
+        self.maybe_extend_index()?;
+        self.maybe_shrink_data()?;
+        let hash = hash_key(entry.key);
+        let len = (entry.key.len() + entry.value.len()) as u32;
+        let pos = self.allocate_data(hash, len)?;
+        if len > 0 {
+            let space = self.get_data_mut(pos, len);
+            space[..entry.key.len()].copy_from_slice(entry.key);
+            space[entry.key.len()..].copy_from_slice(entry.value);
+        }
+        let index_entry =
+            IndexEntryData { position: pos, size: len, key_size: entry.key.len() as u16, flags: entry.flags };
+        let result = {
+            let data = &self.data;
+            let data_start = self.data_start;
+            self.index.index_set(hash, |e| match_key(e, data, data_start, entry.key), index_entry)
+        };
+        match result {
+            Some(old) => {
+                self.free_data(old.position);
+                Ok(Some(self.entry_mut_from_index_data(old)))                
+            },
+            None => Ok(None)
         }
     }
 
@@ -269,68 +357,68 @@ impl Table {
     ///
     /// Internally, a copy-on-write method is used instead of overwriting existing values. Therefore old values might
     /// be visible in the raw table file until a defragmentation happens.
-    /// 
+    ///
     /// This method might increase the size of the internal index or the data section as needed.
     /// If the table file cannot be extended (e.g. due to no space on device), the method will return an `Err` result.
-    pub fn set(&mut self, key: &[u8], data: &[u8]) -> Result<Option<&mut [u8]>, Error> {
-        self.maybe_extend_index()?;
-        self.maybe_shrink_data()?;
-        let hash = hash_key(key);
-        let len = (key.len() + data.len()) as u32;
-        let pos = self.allocate_data(hash, len)?;
-        if len > 0 {
-            let space = self.get_data_mut(pos, len);
-            space[..key.len()].copy_from_slice(key);
-            space[key.len()..].copy_from_slice(data);
-        }
-        let entry = EntryData { position: pos, size: len, key_size: key.len() as u16, flags: 0 };
-        let result = {
-            let data = &self.data;
-            let data_start = self.data_start;
-            self.index.index_set(hash, |e| match_key(e, data, data_start, key), entry)
-        };
-        if let Some(old) = result {
-            self.free_data(old.position);
-            let old_data = self.get_data_mut(old.position + old.key_size as u64, old.size - old.key_size as u32);
-            Ok(Some(old_data))
-        } else {
-            Ok(None)
-        }
+    #[inline]
+    pub fn set(&mut self, key: &[u8], value: &[u8]) -> Result<Option<&mut [u8]>, Error> {
+        self.set_entry(Entry { key, value, flags: 0 }).map(|r| r.map(|e| e.value))
     }
 
     /// Deletes the entry with the given key
-    /// 
+    ///
+    /// If an entry with the given key exists in the table, the entry is removed and returned.
+    /// The returned reference is valid until another modification is made to the table.
+    /// If the key is not found in the table, `None` is returned.
+    ///
+    /// Internally, deleted values are just marked as unused. Therefore old values might be visible in the
+    /// raw table file until a defragmentation happens.
+    ///
+    /// This method might decrease the size of the internal index or the data section as needed.
+    /// If the table file cannot be resized, the method will return an `Err` result.
+    #[inline]
+    pub fn delete_entry(&mut self, key: &[u8]) -> Result<Option<EntryMut<'_>>, Error> {
+        self.maybe_shrink_index()?;
+        self.maybe_shrink_data()?;
+        Ok(self.delete_entry_no_shrink(key))
+    }
+
+    /// Deletes the entry with the given key
+    ///
     /// If an entry with the given key exists in the table, the entry is removed and a reference is returned.
     /// The returned reference is valid until another modification is made to the table.
     /// If the key is not found in the table, `None` is returned.
     ///
-    /// Internally, deleted values are just marked as unused. Therefore old values might be visible in the 
+    /// Internally, deleted values are just marked as unused. Therefore old values might be visible in the
     /// raw table file until a defragmentation happens.
-    /// 
+    ///
     /// This method might decrease the size of the internal index or the data section as needed.
     /// If the table file cannot be resized, the method will return an `Err` result.
+    #[inline]
     pub fn delete(&mut self, key: &[u8]) -> Result<Option<&mut [u8]>, Error> {
-        self.maybe_shrink_index()?;
-        self.maybe_shrink_data()?;
+        self.delete_entry(key).map(|r| r.map(|e| e.value))
+    }
+
+    pub(crate) fn delete_entry_no_shrink<'a>(&'a mut self, key: &[u8]) -> Option<EntryMut<'a>> {
         let hash = hash_key(key);
         let result = {
             let data = &self.data;
             let data_start = self.data_start;
             self.index.index_delete(hash, |e| match_key(e, data, data_start, key))
         };
-        if let Some(old) = result {
-            self.free_data(old.position);
-            let old_data = self.get_data_mut(old.position + old.key_size as u64, old.size - old.key_size as u32);
-            Ok(Some(old_data))
-        } else {
-            Ok(None)
+        match result {
+            Some(old) => {
+                self.free_data(old.position);
+                Some(self.entry_mut_from_index_data(old)) 
+            },
+            None => None
         }
     }
 
-    #[inline]
     /// Deletes all entries in the table
-    /// 
+    ///
     /// This method essentially resets the table to its state after creation.
+    #[inline]
     pub fn clear(&mut self) -> Result<(), Error> {
         self.resize_fd(INITIAL_INDEX_CAPACITY, INITIAL_DATA_SIZE as u64)?;
         self.index.clear();
@@ -339,10 +427,10 @@ impl Table {
         Ok(())
     }
 
-    #[inline]
     /// Explicitly closes the table.
-    /// 
+    ///
     /// Normally this method does not need to be called.
+    #[inline]
     pub fn close(self) {
         // nothing to do, just drop self
     }

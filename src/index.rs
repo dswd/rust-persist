@@ -4,7 +4,7 @@ pub(crate) type Hash = u64;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct EntryData {
+pub(crate) struct IndexEntryData {
     pub position: u64,
     pub size: u32,
     pub key_size: u16,
@@ -12,12 +12,12 @@ pub(crate) struct EntryData {
 }
 
 #[repr(C)]
-pub(crate) struct Entry {
+pub(crate) struct IndexEntry {
     pub(crate) hash: Hash,
-    pub(crate) data: EntryData,
+    pub(crate) data: IndexEntryData,
 }
 
-impl Entry {
+impl IndexEntry {
     #[inline]
     pub(crate) fn is_used(&self) -> bool {
         self.hash != 0
@@ -40,11 +40,11 @@ pub struct Index {
     mask: usize,
     capacity: usize,
     count: usize,
-    entries: &'static mut [Entry],
+    entries: &'static mut [IndexEntry],
 }
 
 impl Index {
-    pub(crate) fn new(entries: &'static mut [Entry], used_count: usize) -> Self {
+    pub(crate) fn new(entries: &'static mut [IndexEntry], used_count: usize) -> Self {
         let capacity = entries.len();
         debug_assert_eq!(capacity.count_ones(), 1);
         Self { mask: capacity - 1, capacity, count: used_count, entries }
@@ -118,14 +118,14 @@ impl Index {
     }
 
     #[inline]
-    fn get_displacement(&self, entry: &Entry, pos: usize) -> usize {
+    fn get_displacement(&self, entry: &IndexEntry, pos: usize) -> usize {
         (pos + self.capacity - (entry.hash as usize & self.mask)) & self.mask
     }
 
     /// Finds the position for this key
     /// If the key is in the table, it will be the position of the key,
     /// otherwise it will be the position where this key should be inserted
-    pub(crate) fn locate<F: FnMut(&EntryData) -> bool>(&self, hash: Hash, mut match_fn: F) -> LocateResult {
+    pub(crate) fn locate<F: FnMut(&IndexEntryData) -> bool>(&self, hash: Hash, mut match_fn: F) -> LocateResult {
         let mut pos = (hash & self.mask as u64) as usize;
         let mut dist = 0;
         loop {
@@ -169,9 +169,9 @@ impl Index {
         self.entries[last_pos].clear();
     }
 
-    pub(crate) fn index_set<F: FnMut(&EntryData) -> bool>(
-        &mut self, hash: Hash, match_fn: F, data: EntryData,
-    ) -> Option<EntryData> {
+    pub(crate) fn index_set<F: FnMut(&IndexEntryData) -> bool>(
+        &mut self, hash: Hash, match_fn: F, data: IndexEntryData,
+    ) -> Option<IndexEntryData> {
         match self.locate(hash, match_fn) {
             LocateResult::Found(pos) => {
                 let mut old = data;
@@ -215,7 +215,7 @@ impl Index {
     }
 
     #[inline]
-    pub(crate) fn index_get<F: FnMut(&EntryData) -> bool>(&self, hash: Hash, match_fn: F) -> Option<EntryData> {
+    pub(crate) fn index_get<F: FnMut(&IndexEntryData) -> bool>(&self, hash: Hash, match_fn: F) -> Option<IndexEntryData> {
         match self.locate(hash, match_fn) {
             LocateResult::Found(pos) => Some(self.entries[pos].data),
             _ => None,
@@ -223,7 +223,7 @@ impl Index {
     }
 
     #[inline]
-    pub(crate) fn index_delete<F: FnMut(&EntryData) -> bool>(&mut self, hash: Hash, match_fn: F) -> Option<EntryData> {
+    pub(crate) fn index_delete<F: FnMut(&IndexEntryData) -> bool>(&mut self, hash: Hash, match_fn: F) -> Option<IndexEntryData> {
         match self.locate(hash, match_fn) {
             LocateResult::Found(pos) => {
                 let entry = self.entries[pos].data;
@@ -235,7 +235,7 @@ impl Index {
         }
     }
 
-    pub(crate) fn get_entries(&self) -> &[Entry] {
+    pub(crate) fn get_entries(&self) -> &[IndexEntry] {
         self.entries
     }
 

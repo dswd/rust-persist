@@ -6,17 +6,17 @@ use memmap::MmapMut;
 
 pub type MMap = MmapMut;
 
-use crate::{total_size, Entry, Error, Header, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY};
+use crate::{total_size, IndexEntry, Error, Header, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY};
 
 /// This method is unsafe as it potentially creates references to uninitialized memory
 pub(crate) unsafe fn mmap_as_ref(
     mmap: &mut MMap, index_capacity: usize,
-) -> (&'static mut Header, &'static mut [Entry], usize, &'static mut [u8]) {
+) -> (&'static mut Header, &'static mut [IndexEntry], usize, &'static mut [u8]) {
     if (mmap.len() as u64) < total_size(index_capacity, 0) {
         panic!("Memory map too small");
     }
     let header = &mut *(mmap.as_mut_ptr() as *mut Header);
-    let ptr = mmap.as_mut_ptr().add(mem::size_of::<Header>()) as *mut Entry;
+    let ptr = mmap.as_mut_ptr().add(mem::size_of::<Header>()) as *mut IndexEntry;
     let entries = slice::from_raw_parts_mut(ptr, index_capacity);
     let data_start = total_size(index_capacity, 0) as usize;
     let data = slice::from_raw_parts_mut(mmap.as_mut_ptr().add(data_start), mmap.len() - data_start);
@@ -33,7 +33,7 @@ pub(crate) struct OpenFdResult {
     pub fd: File,
     pub mmap: MMap,
     pub header: &'static mut Header,
-    pub index_entries: &'static mut [Entry],
+    pub index_entries: &'static mut [IndexEntry],
     pub data_start: usize,
     pub data: &'static mut [u8],
 }

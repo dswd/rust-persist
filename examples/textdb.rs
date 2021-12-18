@@ -45,8 +45,8 @@ fn cmd_list(table: &mut Table) -> Result<(), Error> {
     if table.is_empty() {
         eprintln!("Table is empty");
     }
-    for (key, _) in table.iter() {
-        println!("{}", String::from_utf8_lossy(key));
+    for entry in table.iter() {
+        println!("{}", String::from_utf8_lossy(entry.key));
     }
     Ok(())
 }
