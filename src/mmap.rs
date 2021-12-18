@@ -2,6 +2,7 @@ use std::fs::OpenOptions;
 use std::path::Path;
 use std::{fs::File, mem, slice};
 
+use fs2::FileExt;
 use memmap::MmapMut;
 
 pub type MMap = MmapMut;
@@ -40,6 +41,7 @@ pub(crate) struct OpenFdResult {
 
 pub(crate) fn open_fd(path: &Path, create: bool) -> Result<OpenFdResult, Error> {
     let fd = OpenOptions::new().read(true).write(true).create(create).open(path).map_err(Error::Io)?;
+    fd.lock_exclusive().map_err(Error::Io)?;
     if create {
         fd.set_len(total_size(INITIAL_INDEX_CAPACITY, INITIAL_DATA_SIZE as u64)).map_err(Error::Io)?;
     }

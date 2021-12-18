@@ -223,9 +223,6 @@ impl Table {
     }
 
     /// Open an existing table from the given path.
-    ///
-    /// Warning: Concurrent uses of the same table will result in data loss and other weird/unsafe behaviour.
-    /// Make sure to only open the table once.
     #[inline]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         Self::new_index(path.as_ref(), false)
