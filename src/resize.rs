@@ -73,6 +73,9 @@ impl Table {
         self.header.set_dirty(true);
         let index_capacity_new = self.index.capacity() * 2;
         let data_start_new = total_size(index_capacity_new, 0);
+        if data_start_new > self.mem.end() {
+            self.extend_data((data_start_new - self.mem.end()) as u32)?;
+        }
         let evicted = self.mem.set_start(data_start_new);
         // important: begin with last evicted block to avoid overwriting its second half with the first entry
         for old_entry in evicted.into_iter().rev() {
@@ -173,6 +176,22 @@ mod tests {
         let tbl = Table::open(file.path()).unwrap();
         assert!(tbl.is_valid());
     }
+
+    #[test]
+    fn extend_index_past_data_end() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let mut tbl = Table::create(file.path()).unwrap();
+        let data = [];
+        for i in 0u16..150 {
+            tbl.set(&i.to_ne_bytes(), &data).unwrap();
+            assert!(tbl.is_valid());
+        }
+        assert!(tbl.index.capacity() > INITIAL_INDEX_CAPACITY);
+        tbl.close();
+        let tbl = Table::open(file.path()).unwrap();
+        assert!(tbl.is_valid());
+    }
+
 
     #[test]
     fn shrink_index() {

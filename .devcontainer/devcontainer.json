@@ -10,7 +10,6 @@
 	],
 	// Set *default* container specific settings.json values on container create.
 	"settings": {
-		"terminal.integrated.shell.linux": "/bin/bash",
 		"lldb.executable": "/usr/bin/lldb",
 		// VS Code don't watch files under ./target
 		"files.watcherExclude": {
@@ -25,7 +24,8 @@
 		"editorconfig.editorconfig",
 		"swellaby.vscode-rust-test-adapter",
 		"matklad.rust-analyzer",
-		"asciidoctor.asciidoctor-vscode"
+		"asciidoctor.asciidoctor-vscode",
+		"ms-vscode.test-adapter-converter"
 	],
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
