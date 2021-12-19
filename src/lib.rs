@@ -94,6 +94,30 @@ pub enum Error {
     Serialize(rmp_serde::encode::Error),
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Io(err) => {
+                f.write_str("Io error")?;
+                err.fmt(f)
+            },
+            Error::WrongHeader => f.write_str("Persistence error: File has wrong header"),
+            Error::TableLocked => f.write_str("Persistence error: Table is locked"),
+            Error::Deserialize(err) => {
+                f.write_str("Persistence error: Failed to deserialize data:")?;
+                err.fmt(f)        
+            },
+            Error::Serialize(err) => {
+                f.write_str("Persistence error: Failed to serialize data:")?;
+                err.fmt(f)        
+            },
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+
 #[repr(C)]
 struct Header {
     header: [u8; 16],
