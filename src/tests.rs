@@ -3,7 +3,12 @@ use std::{cmp, collections::HashMap, mem};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 
-use crate::{hash_key, index::IndexEntry, mmap::open_fd, Header, Table};
+use crate::{
+    index::IndexEntry,
+    mmap::open_fd,
+    table::{hash_key, Header},
+    Table,
+};
 
 type Rand = ChaCha8Rng;
 

@@ -4,7 +4,8 @@ use crate::{
     index::Index,
     memmngr::MemoryManagment,
     mmap::{self, mmap_as_ref},
-    total_size, Error, Table, INITIAL_INDEX_CAPACITY, MAX_USAGE, MIN_USAGE,
+    table::total_size,
+    Error, Table, INITIAL_INDEX_CAPACITY, MAX_USAGE, MIN_USAGE,
 };
 
 impl Table {
@@ -191,7 +192,6 @@ mod tests {
         let tbl = Table::open(file.path()).unwrap();
         assert!(tbl.is_valid());
     }
-
 
     #[test]
     fn shrink_index() {

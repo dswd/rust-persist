@@ -8,7 +8,8 @@ use memmap::MmapMut;
 
 pub type MMap = MmapMut;
 
-use crate::{total_size, Error, Header, IndexEntry, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY};
+use crate::table::{total_size, Header};
+use crate::{Error, IndexEntry, INDEX_HEADER, INITIAL_DATA_SIZE, INITIAL_INDEX_CAPACITY};
 
 /// This method is unsafe as it potentially creates references to uninitialized memory
 pub(crate) unsafe fn mmap_as_ref(
