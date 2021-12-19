@@ -23,6 +23,7 @@ impl Table {
     /// If the key cannot be encoded or the value cannot be decoded, `Err` is returned.
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
+    #[inline]
     pub fn get_obj<K: Serialize, V: DeserializeOwned>(&self, key: K) -> Result<Option<V>, Error> {
         match self.get(&serialize(key)?) {
             Some(v) => Ok(Some(deserialize(v)?)),
@@ -39,6 +40,7 @@ impl Table {
     /// If the table file cannot be extended (e.g. due to no space on device), the method will return an `Err` result.
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
+    #[inline]
     pub fn set_obj<K: Serialize, V: Serialize>(&mut self, key: K, value: V) -> Result<bool, Error> {
         self.set(&serialize(key)?, &serialize(value)?).map(|v| v.is_some())
     }
@@ -52,6 +54,7 @@ impl Table {
     /// If the table file cannot be resized, the method will return an `Err` result.
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
+    #[inline]
     pub fn delete_obj<K: Serialize>(&mut self, key: K) -> Result<bool, Error> {
         self.delete(&serialize(key)?).map(|v| v.is_some())
     }

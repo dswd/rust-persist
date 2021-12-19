@@ -39,6 +39,7 @@ pub struct MemoryManagment {
 }
 
 impl MemoryManagment {
+    #[inline]
     pub fn new(start: Pos, end: Pos) -> Self {
         let mut free = BTreeSet::new();
         if start != end {
@@ -47,6 +48,7 @@ impl MemoryManagment {
         Self { start, end, used: BTreeSet::new(), free, used_size: 0 }
     }
 
+    #[inline]
     pub(crate) fn set_used(&mut self, start: Pos, size: Size, hash: Hash) {
         self.used.insert(Used { start, size: cmp::max(size, 1), hash });
     }
@@ -214,6 +216,7 @@ impl MemoryManagment {
         self.end
     }
 
+    #[inline]
     pub(crate) fn clear(&mut self) {
         self.used.clear();
         self.free.clear();

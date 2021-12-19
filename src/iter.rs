@@ -30,6 +30,7 @@ impl Table {
     ///
     /// Each entry will be returned exactly once but in no particular order.
     /// The entries are returned as tuples of key and value.
+    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = Entry<'_>> {
         Iter { pos: 0, entries: self.index.get_entries(), tbl: self }
     }
@@ -37,6 +38,7 @@ impl Table {
     /// Execute the given method for all entries in the table
     ///
     /// The method will be executed once for each entry in the table.
+    #[inline]
     pub fn each<F: FnMut(Entry<'_>)>(&self, mut f: F) {
         for entry in self.iter() {
             f(entry)

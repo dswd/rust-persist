@@ -57,6 +57,7 @@ impl Table {
         Ok(())
     }
 
+    #[inline]
     pub(crate) fn maybe_shrink_data(&mut self) -> Result<(), Error> {
         if self.mem.used_size() > self.data.len() as u64 / 2 || self.data.len() <= 4 * 1024 {
             return Ok(());

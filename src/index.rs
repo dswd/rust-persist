@@ -52,6 +52,7 @@ pub struct Index {
 }
 
 impl Index {
+    #[inline]
     pub(crate) fn new(entries: &'static mut [IndexEntry], used_count: usize) -> Self {
         let capacity = entries.len();
         debug_assert_eq!(capacity.count_ones(), 1);
@@ -76,6 +77,7 @@ impl Index {
         }
     }
 
+    #[inline]
     pub(crate) fn grow_from_half(&mut self) {
         for entry in &mut self.entries[self.capacity / 2..] {
             entry.clear()
@@ -91,10 +93,12 @@ impl Index {
         self.reinsert_all();
     }
 
+    #[inline]
     pub(crate) fn reinsert_all(&mut self) {
         self.reinsert(0, self.capacity)
     }
 
+    #[inline]
     pub(crate) fn clear(&mut self) {
         for entry in self.entries.iter_mut() {
             entry.clear()
@@ -117,10 +121,12 @@ impl Index {
         }
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.count
     }
 
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
@@ -133,6 +139,7 @@ impl Index {
     /// Finds the position for this key
     /// If the key is in the table, it will be the position of the key,
     /// otherwise it will be the position where this key should be inserted
+    #[inline]
     pub(crate) fn locate<F: FnMut(&IndexEntryData) -> bool>(&self, hash: Hash, mut match_fn: F) -> LocateResult {
         let mut pos = (hash & self.mask as u64) as usize;
         let mut dist = 0;
@@ -247,6 +254,7 @@ impl Index {
         }
     }
 
+    #[inline]
     pub(crate) fn get_entries(&self) -> &[IndexEntry] {
         self.entries
     }

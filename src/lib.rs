@@ -72,7 +72,8 @@ const MIN_USAGE: f64 = 0.35;
 const INITIAL_INDEX_CAPACITY: usize = 128;
 const INITIAL_DATA_SIZE: usize = 0;
 
-fn is_be() -> bool {
+#[inline(always)]
+const fn is_be() -> bool {
     1001u16.to_be() == 1001u16
 }
 
@@ -101,11 +102,13 @@ struct Header {
 }
 
 impl Header {
+    #[inline]
     pub fn set_flag(&mut self, byte: usize, bit: usize, val: bool) {
         let mask = 1u8 << bit;
         self.flags[byte] = (self.flags[byte] & !mask) | if val { mask } else { 0 }
     }
 
+    #[inline]
     pub fn get_flag(&self, byte: usize, bit: usize) -> bool {
         let mask = 1u8 << bit;
         self.flags[byte] & mask > 0
@@ -331,12 +334,14 @@ impl Table {
         self.mmap.flush().map_err(Error::Io)
     }
 
+    #[inline]
     pub(crate) fn entry_from_index_data(&self, entry: IndexEntryData) -> Entry<'_> {
         let data = self.get_data(entry.position, entry.size);
         let (key, value) = data.split_at(entry.key_size as usize);
         Entry { key, value, flags: entry.flags }
     }
 
+    #[inline]
     pub(crate) fn entry_mut_from_index_data(&mut self, entry: IndexEntryData) -> EntryMut<'_> {
         let data = self.get_data_mut(entry.position, entry.size);
         let (key, value) = data.split_at_mut(entry.key_size as usize);
@@ -345,6 +350,7 @@ impl Table {
 
     /// Retrieves and returns the entry associated with the given key.
     /// If no entry with the given key is stored in the table, `None` is returned.
+    #[inline]
     pub fn get_entry(&self, key: &[u8]) -> Option<Entry<'_>> {
         let hash = hash_key(key);
         self.index
@@ -362,6 +368,7 @@ impl Table {
     /// Retrieves and returns the entry associated with the given key.
     /// If no entry with the given key is stored in the table, `None` is returned.
     /// If the returned value is modified, it directly affects the stored value.
+    #[inline]
     pub fn get_entry_mut(&mut self, key: &[u8]) -> Option<EntryMut<'_>> {
         let hash = hash_key(key);
         self.index
@@ -388,6 +395,7 @@ impl Table {
     ///
     /// This method might increase the size of the internal index or the data section as needed.
     /// If the table file cannot be extended (e.g. due to no space on device), the method will return an `Err` result.
+    #[inline]
     pub fn set_entry<'a>(&mut self, entry: Entry<'a>) -> Result<Option<EntryMut<'_>>, Error> {
         self.maybe_extend_index()?;
         self.maybe_shrink_data()?;
@@ -465,6 +473,7 @@ impl Table {
         self.delete_entry(key).map(|r| r.map(|e| e.value))
     }
 
+    #[inline]
     pub(crate) fn delete_entry_no_shrink<'a>(&'a mut self, key: &[u8]) -> Option<EntryMut<'a>> {
         let hash = hash_key(key);
         let result = {
