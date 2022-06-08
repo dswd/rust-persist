@@ -268,6 +268,14 @@ impl Table {
         EntryMut { key, value, flags: entry.flags }
     }
 
+    /// Returns whether an entry is associated with the given key.
+    #[inline]
+    pub fn contains(&self, key: &[u8]) -> bool {
+        let hash = hash_key(key);
+        self.index
+            .index_get(hash, |e| match_key(e, self.data, self.data_start, key)).is_some()
+    }
+
     /// Retrieves and returns the entry associated with the given key.
     /// If no entry with the given key is stored in the table, `None` is returned.
     #[inline]

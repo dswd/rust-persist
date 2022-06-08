@@ -45,7 +45,7 @@
 //! assert_eq!(table.get_obj("key2").unwrap(), Some((true, "string".to_string())));
 //! ```
 
-use std::{hash::Hasher, io};
+use std::io;
 
 use index::{Hash, IndexEntry};
 

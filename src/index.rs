@@ -44,6 +44,13 @@ pub enum LocateResult {
     Steal(usize), // Found a spot to steal at this position while searching for a key
 }
 
+/// In-memory index
+/// 
+/// Each new entry is mapped to a position based on its hash modulo the capacity (bit and the mask).
+/// If the slot at the position is used by another entry, the next free slot is taken. 
+/// Existing entries are moved to the right if their hash value is bigger (modulo capacity).
+/// The `displacement` measures the distance from each entry location to its desired spot.
+/// The average displacement should be `1/2 * u/(1-u)` where `u` is the fraction of used entries.
 pub struct Index {
     mask: usize,
     capacity: usize,

@@ -17,6 +17,16 @@ pub fn deserialize<T: DeserializeOwned>(data: &[u8]) -> Result<T, Error> {
 }
 
 impl Table {
+    /// Returns whether an entry is associated with the given key.
+    ///
+    /// If the key cannot be encoded or the value cannot be decoded, `Err` is returned.
+    ///
+    /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
+    #[inline]
+    pub fn contains_obj<K: Serialize>(&self, key: K) -> Result<bool, Error> {
+        Ok(self.contains(&serialize(key)?))
+    }
+
     /// Loads and returns the value stored with the given key.
     ///
     /// If no entry with the given key exists in the table, `None` is returned.
@@ -120,6 +130,12 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
     #[inline]
     pub fn into_inner(self) -> Table {
         self.inner
+    }
+
+    /// Returns whether an entry is associated with the given key.
+    #[inline]
+    pub fn contains(&self, key: K) -> Result<bool, Error> {
+        self.inner.contains_obj(key)
     }
 
     /// Loads and returns the value stored with the given key.
