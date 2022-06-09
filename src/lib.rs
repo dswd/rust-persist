@@ -62,7 +62,7 @@ mod tests;
 
 #[cfg(feature = "msgpack")]
 pub use msgpack::{deserialize, serialize, TypedTable};
-pub use table::{Entry, EntryMut, Table};
+pub use table::{Entry, EntryMut, Table, Stats};
 
 const INDEX_HEADER: [u8; 16] = *b"rust-persist-01\n";
 

@@ -194,6 +194,17 @@ impl Table {
         Self::new_index(path.as_ref(), true)
     }
 
+    /// Opens an existing or creates a new typed table at the given path.
+    #[inline]
+    pub fn open_or_create<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let path = path.as_ref();
+        if path.exists() {
+            Self::open(path)
+        } else {
+            Self::create(path)
+        }
+    }
+
     pub(crate) fn allocate_data(&mut self, hash: Hash, mut size: u32) -> Result<u64, Error> {
         size = cmp::max(size, 1);
         match self.mem.allocate(size, hash) {
@@ -272,8 +283,7 @@ impl Table {
     #[inline]
     pub fn contains(&self, key: &[u8]) -> bool {
         let hash = hash_key(key);
-        self.index
-            .index_get(hash, |e| match_key(e, self.data, self.data_start, key)).is_some()
+        self.index.index_get(hash, |e| match_key(e, self.data, self.data_start, key)).is_some()
     }
 
     /// Retrieves and returns the entry associated with the given key.
@@ -470,4 +480,23 @@ impl Table {
         }
         valid
     }
+
+    pub fn stats(&self) -> Stats {
+        Stats {
+            valid: self.is_valid(),
+            entries: self.len(),
+            capacity: self.index.capacity(),
+            size: self.size(),
+            size_used: self.mem.used_size(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Stats {
+    pub valid: bool,
+    pub entries: usize,
+    pub capacity: usize,
+    pub size: u64,
+    pub size_used: u64,
 }
