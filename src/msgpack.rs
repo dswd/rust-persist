@@ -23,7 +23,7 @@ impl Table {
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn contains_obj<K: Serialize>(&self, key: &K) -> Result<bool, Error> {
+    pub fn contains_obj<K: Serialize>(&self, key: K) -> Result<bool, Error> {
         Ok(self.contains(&serialize(key)?))
     }
 
@@ -34,7 +34,7 @@ impl Table {
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn get_obj<K: Serialize, V: DeserializeOwned>(&self, key: &K) -> Result<Option<V>, Error> {
+    pub fn get_obj<K: Serialize, V: DeserializeOwned>(&self, key: K) -> Result<Option<V>, Error> {
         match self.get(&serialize(key)?) {
             Some(v) => Ok(Some(deserialize(v)?)),
             None => Ok(None),
@@ -51,7 +51,7 @@ impl Table {
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn set_obj<K: Serialize, V: Serialize>(&mut self, key: &K, value: &V) -> Result<bool, Error> {
+    pub fn set_obj<K: Serialize, V: Serialize>(&mut self, key: K, value: V) -> Result<bool, Error> {
         self.set(&serialize(key)?, &serialize(value)?).map(|v| v.is_some())
     }
 
@@ -65,7 +65,7 @@ impl Table {
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn delete_obj<K: Serialize>(&mut self, key: &K) -> Result<bool, Error> {
+    pub fn delete_obj<K: Serialize>(&mut self, key: K) -> Result<bool, Error> {
         self.delete(&serialize(key)?).map(|v| v.is_some())
     }
 
@@ -79,7 +79,7 @@ impl Table {
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn take_obj<K: Serialize, V: DeserializeOwned>(&mut self, key: &K) -> Result<Option<V>, Error> {
+    pub fn take_obj<K: Serialize, V: DeserializeOwned>(&mut self, key: K) -> Result<Option<V>, Error> {
         match self.delete(&serialize(key)?)? {
             Some(v) => Ok(Some(deserialize(v)?)),
             None => Ok(None),
@@ -101,6 +101,22 @@ impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item = Entry<'a>>
         self.inner.next().map(|entry| Ok((deserialize(entry.key)?, deserialize(entry.value)?)))
     }
 }
+
+
+/// Internal iterator over all keys in the typed table
+pub struct KeyIter<K, I> {
+    inner: I,
+    _key: PhantomData<K>,
+}
+
+impl<'a, K: DeserializeOwned, I: Iterator<Item = Entry<'a>>> Iterator for KeyIter<K, I> {
+    type Item = Result<K, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|entry| deserialize(entry.key))
+    }
+}
+
 
 /// A typed version of the table.
 ///
@@ -205,6 +221,12 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
         Iter { inner: self.inner.iter(), _key: PhantomData, _value: PhantomData }
     }
 
+    /// Iterate over all entries in the typed table
+    #[inline]
+    pub fn keys(&self) -> impl Iterator<Item = Result<K, Error>> + '_ {
+        KeyIter { inner: self.inner.iter(), _key: PhantomData }
+    }
+
     /// Return the number of entries in the table
     #[inline]
     pub fn len(&self) -> usize {
@@ -253,6 +275,7 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
         self.inner.clear()
     }
 
+    /// Return a statistics struct
     pub fn stats(&self) -> Stats {
         self.inner.stats()
     }
@@ -268,7 +291,7 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
         let mut tbl = Table::create(file.path()).unwrap();
         tbl.set_obj("key1", "value1").unwrap();
-        tbl.set_obj(&("key2", 1), &(1, true)).unwrap();
+        tbl.set_obj(&("key2", 1usize), &(1usize, true)).unwrap();
         assert!(tbl.is_valid());
         assert_eq!(tbl.len(), 2);
         assert_eq!(tbl.get_obj("key1").unwrap(), Some("value1".to_string()));
@@ -290,31 +313,31 @@ mod tests {
     fn test_static_types() {
         let file = tempfile::NamedTempFile::new().unwrap();
         let mut tbl = TypedTable::<usize, String>::create(file.path()).unwrap();
-        tbl.set(1, "value1").unwrap();
-        tbl.set(2, "value2").unwrap();
+        tbl.set(&1, &"value1".to_string()).unwrap();
+        tbl.set(&2, &"value2".to_string()).unwrap();
         assert!(tbl.inner().is_valid());
         assert_eq!(tbl.len(), 2);
-        assert_eq!(tbl.get(1).unwrap(), Some("value1".to_string()));
-        assert_eq!(tbl.get(2).unwrap(), Some("value2".to_string()));
-        tbl.set(1, "value3").unwrap();
+        assert_eq!(tbl.get(&1).unwrap(), Some("value1".to_string()));
+        assert_eq!(tbl.get(&2).unwrap(), Some("value2".to_string()));
+        tbl.set(&1, &"value3".to_string()).unwrap();
         assert!(tbl.inner().is_valid());
         assert_eq!(tbl.len(), 2);
-        assert_eq!(tbl.get(1).unwrap(), Some("value3".to_string()));
-        assert_eq!(tbl.get(2).unwrap(), Some("value2".to_string()));
-        assert!(tbl.delete(1).unwrap());
-        assert!(tbl.delete(2).unwrap());
+        assert_eq!(tbl.get(&1).unwrap(), Some("value3".to_string()));
+        assert_eq!(tbl.get(&2).unwrap(), Some("value2".to_string()));
+        assert!(tbl.delete(&1).unwrap());
+        assert!(tbl.delete(&2).unwrap());
         assert!(tbl.inner().is_valid());
         assert_eq!(tbl.len(), 0);
-        assert_eq!(tbl.get(1).unwrap(), None);
-        assert_eq!(tbl.get(2).unwrap(), None);
+        assert_eq!(tbl.get(&1).unwrap(), None);
+        assert_eq!(tbl.get(&2).unwrap(), None);
     }
 
     #[test]
     fn test_static_iter() {
         let file = tempfile::NamedTempFile::new().unwrap();
         let mut tbl = TypedTable::<usize, String>::create(file.path()).unwrap();
-        tbl.set(1, "value1").unwrap();
-        tbl.set(2, "value2").unwrap();
+        tbl.set(&1, &"value1".to_string()).unwrap();
+        tbl.set(&2, &"value2".to_string()).unwrap();
         assert_eq!(tbl.iter().count(), 2);
     }
 }

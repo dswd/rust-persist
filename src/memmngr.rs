@@ -96,8 +96,8 @@ impl MemoryManagment {
                 Bound::Included(Used { start: pos, size: 0, hash: 0 }),
                 Bound::Excluded(Used { start: pos + 1, size: 0, hash: 0 }),
             ))
-            .cloned()
             .next()
+            .cloned()
         {
             used
         } else {

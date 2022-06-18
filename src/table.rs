@@ -481,22 +481,42 @@ impl Table {
         valid
     }
 
+    /// Return a statistics struct
     pub fn stats(&self) -> Stats {
         Stats {
             valid: self.is_valid(),
             entries: self.len(),
-            capacity: self.index.capacity(),
             size: self.size(),
-            size_used: self.mem.used_size(),
+            hash_size: self.index.capacity() as u64 * mem::size_of::<IndexEntry>() as u64,
+            hash_free: (self.index.capacity() - self.index.len()) as u64 * mem::size_of::<IndexEntry>() as u64,
+            data_size: self.mem.end() - self.mem.start(),
+            data_free: self.mem.end() - self.mem.start() - self.mem.used_size(),
         }
     }
 }
 
+
+/// Struct containing table statistics
 #[derive(Debug)]
 pub struct Stats {
+    /// Whether the table is valid/consistent
     pub valid: bool,
+
+    /// Entries contained in the table
     pub entries: usize,
-    pub capacity: usize,
+
+    /// Total byte size of the table
     pub size: u64,
-    pub size_used: u64,
+
+    /// Total size of the hash table part
+    pub hash_size: u64,
+
+    /// Free size of the hash table part
+    pub hash_free: u64,
+
+    /// Total size of the data part
+    pub data_size: u64,
+
+    /// Free size of the table part
+    pub data_free: u64,
 }
