@@ -22,10 +22,12 @@ safemem = "^0.3.3"
 siphasher = "^0.3.7"
 serde = {version = "1", optional = true}
 rmp-serde = {version = "1.1", optional = true}
+lz4_flex = {version="^0.9.3", optional = true}
 
 [features]
-default = ["msgpack"]
+default = ["msgpack", "compress"]
 msgpack = ["serde", "rmp-serde"]
+compress = ["lz4_flex"]
 
 [[bench]]
 name = "criterion"

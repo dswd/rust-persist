@@ -1,47 +1,37 @@
 use std::{marker::PhantomData, path::Path};
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{Entry, Error, Table, Stats};
+use crate::{Entry, Error, Table, Stats, serialize, deserialize};
 
-/// Method used internally to serialize values to bytes
+/// Method used internally to compress data
 #[inline]
-pub fn serialize<T: Serialize>(val: T) -> Result<Vec<u8>, Error> {
-    rmp_serde::to_vec(&val).map_err(Error::Serialize)
+pub fn compress(val: &[u8]) -> Vec<u8> {
+    lz4_flex::compress_prepend_size(val)
 }
 
-/// Method used internally to deserialize values from bytes
+/// Method used internally to decompress data
 #[inline]
-pub fn deserialize<T: DeserializeOwned>(data: &[u8]) -> Result<T, Error> {
-    rmp_serde::from_read(data).map_err(Error::Deserialize)
+pub fn decompress(data: &[u8]) -> Result<Vec<u8>, Error> {
+    lz4_flex::decompress_size_prepended(data).map_err(Error::Decompress)
 }
 
 impl Table {
-    /// Returns whether an entry is associated with the given key.
-    ///
-    /// If the key cannot be encoded or the value cannot be decoded, `Err` is returned.
-    ///
-    /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
-    #[inline]
-    pub fn contains_obj<K: Serialize>(&self, key: K) -> Result<bool, Error> {
-        Ok(self.contains(&serialize(key)?))
-    }
-
-    /// Loads and returns the value stored with the given key.
+    /// Loads and returns the compressed value stored with the given key.
     ///
     /// If no entry with the given key exists in the table, `None` is returned.
-    /// If the key cannot be encoded or the value cannot be decoded, `Err` is returned.
+    /// If the key cannot be encoded or the value cannot be decoded or decompressed, `Err` is returned.
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn get_obj<K: Serialize, V: DeserializeOwned>(&self, key: K) -> Result<Option<V>, Error> {
+    pub fn get_compressed_obj<K: Serialize, V: DeserializeOwned>(&self, key: K) -> Result<Option<V>, Error> {
         match self.get(&serialize(key)?) {
-            Some(v) => Ok(Some(deserialize(v)?)),
+            Some(v) => Ok(Some(deserialize(&decompress(v)?)?)),
             None => Ok(None),
         }
     }
 
-    /// Stores the given key/value pair in the table.
+    /// Stores the given key/value pair in the table and compresses the value.
     ///
     /// Returns whether the key has already been in the table (and the value has been overwritten).
     /// If the key cannot be encoded or the value cannot be encoded, `Err` is returned.
@@ -51,22 +41,8 @@ impl Table {
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn set_obj<K: Serialize, V: Serialize>(&mut self, key: K, value: V) -> Result<bool, Error> {
-        self.set(&serialize(key)?, &serialize(value)?).map(|v| v.is_some())
-    }
-
-    /// Deletes the entry with the given key from the table.
-    ///
-    /// Returns whether the key has been in the table or not.
-    /// If the key cannot be encoded, `Err` is returned.
-    ///
-    /// This method might decrease the size of the internal index or the data section as needed.
-    /// If the table file cannot be resized, the method will return an `Err` result.
-    ///
-    /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
-    #[inline]
-    pub fn delete_obj<K: Serialize>(&mut self, key: K) -> Result<bool, Error> {
-        self.delete(&serialize(key)?).map(|v| v.is_some())
+    pub fn set_compressed_obj<K: Serialize, V: Serialize>(&mut self, key: K, value: V) -> Result<bool, Error> {
+        self.set(&serialize(key)?, &compress(&serialize(value)?)).map(|v| v.is_some())
     }
 
     /// Deletes and returns the entry with the given key from the table.
@@ -79,13 +55,14 @@ impl Table {
     ///
     /// See [TypedTable](TypedTable#on-serialization) for more info on serialization.
     #[inline]
-    pub fn take_obj<K: Serialize, V: DeserializeOwned>(&mut self, key: K) -> Result<Option<V>, Error> {
+    pub fn take_compressed_obj<K: Serialize, V: DeserializeOwned>(&mut self, key: K) -> Result<Option<V>, Error> {
         match self.delete(&serialize(key)?)? {
-            Some(v) => Ok(Some(deserialize(v)?)),
+            Some(v) => Ok(Some(deserialize(&decompress(v)?)?)),
             None => Ok(None),
         }
     }
 }
+
 
 /// Internal iterator over all entries in the typed table
 struct Iter<K, V, I> {
@@ -98,7 +75,7 @@ impl<'a, K: DeserializeOwned, V: DeserializeOwned, I: Iterator<Item = Entry<'a>>
     type Item = Result<(K, V), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|entry| Ok((deserialize(entry.key)?, deserialize(entry.value)?)))
+        self.inner.next().map(|entry| Ok((deserialize(entry.key)?, deserialize(&decompress(entry.value)?)?)))
     }
 }
 
@@ -118,7 +95,7 @@ impl<'a, K: DeserializeOwned, I: Iterator<Item = Entry<'a>>> Iterator for KeyIte
 }
 
 
-/// A typed version of the table.
+/// A typed version of the table with compressed values.
 ///
 /// This struct wraps the normal [`Table`] and ensures that keys and values have a certain type.
 ///
@@ -134,13 +111,13 @@ impl<'a, K: DeserializeOwned, I: Iterator<Item = Entry<'a>>> Iterator for KeyIte
 /// [`serde::Serialize`] and [`serde::Deserialize`] directly or use [the `derive` feature of `serde`](https://serde.rs/derive.html).
 ///
 /// If any key or value cannot be encoded or decoded, [`Error::Serialize`] or [`Error::Deserialize`] is thrown.
-pub struct TypedTable<K, V> {
+pub struct CompressedTypedTable<K, V> {
     inner: Table,
     _key: PhantomData<K>,
     _value: PhantomData<V>,
 }
 
-impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTable<K, V> {
+impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> CompressedTypedTable<K, V> {
     /// Opens an existing typed table from the given path.
     #[inline]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
@@ -165,12 +142,16 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
     }
 
     /// Returns a reference to the wrapped [`Table`].
+    /// 
+    /// Beware that the inner table will expose the raw compressed data
     #[inline]
     pub fn inner(&self) -> &Table {
         &self.inner
     }
 
     /// Returns the wrapped [`Table`].
+    /// 
+    /// Beware that the inner table will expose the raw compressed data
     #[inline]
     pub fn into_inner(self) -> Table {
         self.inner
@@ -187,7 +168,7 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
     /// See [`Table::get_obj`] for more info
     #[inline]
     pub fn get(&self, key: &K) -> Result<Option<V>, Error> {
-        self.inner.get_obj(key)
+        self.inner.get_compressed_obj(key)
     }
 
     /// Stores the given key/value pair in the table.
@@ -195,7 +176,7 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
     /// See [`Table::set_obj`] for more info
     #[inline]
     pub fn set(&mut self, key: &K, value: &V) -> Result<bool, Error> {
-        self.inner.set_obj(key, value)
+        self.inner.set_compressed_obj(key, value)
     }
 
     /// Deletes the entry with the given key from the table.
@@ -211,7 +192,7 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
     /// See [`Table::take_obj`] for more info
     #[inline]
     pub fn take(&mut self, key: &K) -> Result<Option<V>, Error> {
-        self.inner.take_obj(key)
+        self.inner.take_compressed_obj(key)
     }
 
 
@@ -280,64 +261,4 @@ impl<K: Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> TypedTabl
         self.inner.stats()
     }
 
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dynamic_types() {
-        let file = tempfile::NamedTempFile::new().unwrap();
-        let mut tbl = Table::create(file.path()).unwrap();
-        tbl.set_obj("key1", "value1").unwrap();
-        tbl.set_obj(&("key2", 1usize), &(1usize, true)).unwrap();
-        assert!(tbl.is_valid());
-        assert_eq!(tbl.len(), 2);
-        assert_eq!(tbl.get_obj("key1").unwrap(), Some("value1".to_string()));
-        assert_eq!(tbl.get_obj(&("key2", 1)).unwrap(), Some((1, true)));
-        tbl.set_obj("key1", "value3").unwrap();
-        assert!(tbl.is_valid());
-        assert_eq!(tbl.len(), 2);
-        assert_eq!(tbl.get_obj("key1").unwrap(), Some("value3".to_string()));
-        assert_eq!(tbl.get_obj(&("key2", 1)).unwrap(), Some((1, true)));
-        assert!(tbl.delete_obj("key1").unwrap());
-        assert!(tbl.delete_obj(&("key2", 1)).unwrap());
-        assert!(tbl.is_valid());
-        assert_eq!(tbl.len(), 0);
-        assert_eq!(tbl.get_obj("key1").unwrap(), Option::<bool>::None);
-        assert_eq!(tbl.get_obj(&("key2", 1)).unwrap(), Option::<bool>::None);
-    }
-
-    #[test]
-    fn test_static_types() {
-        let file = tempfile::NamedTempFile::new().unwrap();
-        let mut tbl = TypedTable::<usize, String>::create(file.path()).unwrap();
-        tbl.set(&1, &"value1".to_string()).unwrap();
-        tbl.set(&2, &"value2".to_string()).unwrap();
-        assert!(tbl.inner().is_valid());
-        assert_eq!(tbl.len(), 2);
-        assert_eq!(tbl.get(&1).unwrap(), Some("value1".to_string()));
-        assert_eq!(tbl.get(&2).unwrap(), Some("value2".to_string()));
-        tbl.set(&1, &"value3".to_string()).unwrap();
-        assert!(tbl.inner().is_valid());
-        assert_eq!(tbl.len(), 2);
-        assert_eq!(tbl.get(&1).unwrap(), Some("value3".to_string()));
-        assert_eq!(tbl.get(&2).unwrap(), Some("value2".to_string()));
-        assert!(tbl.delete(&1).unwrap());
-        assert!(tbl.delete(&2).unwrap());
-        assert!(tbl.inner().is_valid());
-        assert_eq!(tbl.len(), 0);
-        assert_eq!(tbl.get(&1).unwrap(), None);
-        assert_eq!(tbl.get(&2).unwrap(), None);
-    }
-
-    #[test]
-    fn test_static_iter() {
-        let file = tempfile::NamedTempFile::new().unwrap();
-        let mut tbl = TypedTable::<usize, String>::create(file.path()).unwrap();
-        tbl.set(&1, &"value1".to_string()).unwrap();
-        tbl.set(&2, &"value2".to_string()).unwrap();
-        assert_eq!(tbl.iter().count(), 2);
-    }
 }

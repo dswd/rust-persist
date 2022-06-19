@@ -55,6 +55,8 @@ mod memmngr;
 mod mmap;
 #[cfg(feature = "msgpack")]
 mod msgpack;
+#[cfg(feature = "compress")]
+mod compress;
 mod resize;
 mod table;
 #[cfg(test)]
@@ -62,6 +64,8 @@ mod tests;
 
 #[cfg(feature = "msgpack")]
 pub use msgpack::{deserialize, serialize, TypedTable};
+#[cfg(feature = "compress")]
+pub use compress::{compress, decompress, CompressedTypedTable};
 pub use table::{Entry, EntryMut, Table, Stats};
 
 const INDEX_HEADER: [u8; 16] = *b"rust-persist-01\n";
@@ -86,6 +90,8 @@ pub enum Error {
     #[cfg(feature = "msgpack")]
     /// A key or value could not be serialized
     Serialize(rmp_serde::encode::Error),
+    #[cfg(feature = "compress")]
+    Decompress(lz4_flex::block::DecompressError)
 }
 
 impl std::fmt::Display for Error {
@@ -103,6 +109,10 @@ impl std::fmt::Display for Error {
             }
             Error::Serialize(err) => {
                 f.write_str("Persistence error: Failed to serialize data:")?;
+                err.fmt(f)
+            }
+            Error::Decompress(err) => {
+                f.write_str("Persistence error: Failed to decrompress data:")?;
                 err.fmt(f)
             }
         }
