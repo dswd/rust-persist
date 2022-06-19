@@ -228,6 +228,10 @@ impl MemoryManagment {
         self.used
     }
 
+    pub fn biggest_gap(&self) -> Size {
+        self.free.iter().last().map(|v| v.size).unwrap_or_default()
+    }
+
     pub(crate) fn is_valid(&self) -> bool {
         let mut valid = true;
         let mut blocks = Vec::with_capacity(self.used.len() + self.free.len());

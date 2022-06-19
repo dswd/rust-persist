@@ -491,6 +491,9 @@ impl Table {
             hash_free: (self.index.capacity() - self.index.len()) as u64 * mem::size_of::<IndexEntry>() as u64,
             data_size: self.mem.end() - self.mem.start(),
             data_free: self.mem.end() - self.mem.start() - self.mem.used_size(),
+            avg_size: if self.is_empty() { 0 } else { self.mem.used_size() / self.len() as u64 },
+            biggest_gap: self.mem.biggest_gap(),
+            overhead: (self.size() - self.mem.used_size()) as f32 / self.size() as f32,
         }
     }
 }
@@ -519,4 +522,13 @@ pub struct Stats {
 
     /// Free size of the table part
     pub data_free: u64,
+
+    /// Average entry size (key + value)
+    pub avg_size: u64,
+
+    /// Biggest gap in data part
+    pub biggest_gap: u32,
+
+    /// Overhead fraction
+    pub overhead: f32
 }
