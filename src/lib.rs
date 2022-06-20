@@ -90,6 +90,7 @@ pub enum Error {
     #[cfg(feature = "msgpack")]
     /// A key or value could not be serialized
     Serialize(rmp_serde::encode::Error),
+    /// Failed to decompress data
     #[cfg(feature = "compress")]
     Decompress(lz4_flex::block::DecompressError)
 }
