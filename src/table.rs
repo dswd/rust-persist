@@ -1,5 +1,6 @@
 use std::{cmp, fs::File, hash::Hasher, mem, path::Path};
 
+use serde_derive::Serialize;
 use siphasher::sip::SipHasher13;
 
 use crate::memmngr::{MemoryManagment, Used};
@@ -500,7 +501,7 @@ impl Table {
 
 
 /// Struct containing table statistics
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Stats {
     /// Whether the table is valid/consistent
     pub valid: bool,
